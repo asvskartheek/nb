@@ -1,7 +1,7 @@
 // Research notebook: notes as a time-ordered log, lines of work as lanes, agent chats per note.
 "use strict";
 const $ = s => document.querySelector(s);
-const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const { esc, trunc, fmt, fmtT, LOWER_BETTER } = NBViz;  // viz.js loads first
 const IST = 330 * 60000;
 const ist = ts => new Date(Date.parse(ts) + IST);           // read with getUTC*: the project's local time, any viewer
 const dayKey = ts => ist(ts).toISOString().slice(0, 10);
@@ -12,10 +12,6 @@ const AREAS = ["setup","infra","data","eval","agent","retrieval","reading","mode
 const KINDS = ["setup","build","run","result","finding","decision","deadend","fix","question","milestone"];
 const KCOL = {setup:"var(--ink-3)",build:"var(--ink-3)",run:"var(--info)",result:"var(--info)",finding:"var(--fnd)",
   question:"var(--fnd)",decision:"var(--dec)",deadend:"var(--loss)",fix:"var(--win)",milestone:"var(--win)"};
-const LOWER_BETTER = /latency|cost|\$|time|p50|p90|p95|wrong|error|crash|punt|stall|token|sec\b/i;
-const fmt = (v, u) => v == null || v === "" ? "–" : (typeof v === "number" ? (Math.abs(v) >= 1000 ? v.toLocaleString("en") :
-  Math.abs(v) < 0.1 && v !== 0 ? +v.toPrecision(2) : +v.toFixed(Math.abs(v) < 10 ? 2 : 1)) : esc(v)) + (u ? `<small>${esc(u)}</small>` : "");
-const fmtT = (v, u) => fmt(v, "").replace(/<[^>]+>/g, "") + (u ? (u === "%" ? "%" : " " + u) : "");
 
 const S = { notes: [], threads: {}, byId: {}, disc: [], q: "", kind: null, thread: null, area: null, led: {} };
 
@@ -161,7 +157,6 @@ function renderLanes() {
 const dotSvg = (cx, cy, n, t) => n.kind === "milestone"
   ? `<rect x="${cx - 4}" y="${cy - 4}" width="8" height="8" transform="rotate(45 ${cx} ${cy})" fill="${KCOL[n.kind]}" data-note="${esc(n.id)}" data-tip="${esc(hhmm(n.ts) + " " + dayLabel(dayKey(n.ts)) + " · " + n.title)}"/>`
   : `<circle cx="${cx}" cy="${cy}" r="3.4" fill="${KCOL[n.kind] || "var(--ink-3)"}" data-note="${esc(n.id)}" data-tip="${esc(hhmm(n.ts) + " " + dayLabel(dayKey(n.ts)) + " · " + n.title)}"/>`;
-const trunc = (s, n) => (s = String(s || "")).length > n ? s.slice(0, n - 1) + "…" : s;
 
 // ---------- index sidebar
 function renderIndex() {
@@ -263,85 +258,8 @@ function metrics(ms) {
   }).join("")}</div>`;
 }
 
-// ---------- visuals
-function viz(v, color) {
-  try { return (VIZ[v.type] || (() => ""))(v, color); } catch (e) { return ""; }
-}
-const PAL = i => `var(--c${i % 12})`;
-const VIZ = {
-  bars(v, color) {
-    const it = (v.items || []).filter(x => typeof x.value === "number"); if (!it.length) return "";
-    const max = Math.max(...it.map(x => x.value), v.unit === "%" ? 100 : 0) || 1, W = 600, LW = 150, RH = 22;
-    const hl = v.highlight;
-    return `<svg viewBox="0 0 ${W} ${it.length * RH}">${it.map((x, i) => {
-      const w = Math.max(2, x.value / max * (W - LW - 70));
-      return `<text x="${LW - 8}" y="${i * RH + 15}" text-anchor="end">${esc(trunc(x.label, 24))}</text>
-      ${v.unit === "%" ? `<rect x="${LW}" y="${i * RH + 5}" width="${W - LW - 70}" height="12" rx="2" fill="var(--surface-2)"/>` : ""}
-      <rect x="${LW}" y="${i * RH + 5}" width="${w}" height="12" rx="2" fill="${hl && hl !== x.label ? "var(--line-2)" : color}"/>
-      <text class="v" x="${LW + w + 6}" y="${i * RH + 15}">${fmtT(x.value, v.unit)}</text>`; }).join("")}</svg>`;
-  },
-  delta(v, color) {
-    const a = v.before, b = v.after; if (typeof a !== "number" || typeof b !== "number") return "";
-    const lowBetter = LOWER_BETTER.test((v.label || "") + " " + (v.unit || "")), dv = b - a;
-    const good = dv === 0 ? "var(--ink-3)" : (lowBetter ? dv < 0 : dv > 0) ? "var(--win)" : "var(--loss)";
-    const lo = Math.min(a, b), hi = Math.max(a, b), pad = (hi - lo) * 0.6 || Math.abs(hi) * 0.1 || 1;
-    let mn = lo - pad, mx = hi + pad;
-    if (v.unit === "%") { mn = Math.max(0, mn); mx = Math.min(100, mx); }
-    const W = 600, X = t => 150 + (t - mn) / (mx - mn) * (W - 230);
-    return `<svg viewBox="0 0 ${W} 52">
-      <text x="0" y="22" class="mut">${esc(trunc(v.label, 22))}</text>
-      <line x1="150" x2="${W - 80}" y1="26" y2="26" stroke="var(--line-2)"/>
-      <line x1="${X(a)}" x2="${X(b)}" y1="26" y2="26" stroke="${good}" stroke-width="3"/>
-      <circle cx="${X(a)}" cy="26" r="5" fill="var(--surface)" stroke="var(--ink-3)" stroke-width="2"/>
-      <circle cx="${X(b)}" cy="26" r="6" fill="${good}"/>
-      <text x="${X(a)}" y="12" text-anchor="middle" class="mut">${esc(v.bl || "before")} ${fmtT(a, v.unit)}</text>
-      <text x="${X(b)}" y="48" text-anchor="middle" class="v">${esc(v.al || "after")} ${fmtT(b, v.unit)}</text>
-      <text x="${W}" y="31" text-anchor="end" class="v" style="fill:${good}">${dv > 0 ? "+" : ""}${fmtT(+dv.toFixed(4), v.unit === "%" ? "pp" : v.unit)}</text></svg>`;
-  },
-  split(v) {
-    const it = (v.items || []).filter(x => typeof x.value === "number" && x.value > 0); if (!it.length) return "";
-    const tot = it.reduce((s, x) => s + x.value, 0), W = 600; let x0 = 0;
-    const bars = it.map((x, i) => { const w = x.value / tot * W, r = `<rect x="${x0}" y="0" width="${Math.max(1, w - 1.5)}" height="16" fill="${PAL(i)}"/>`; x0 += w; return r; }).join("");
-    const rows = Math.ceil(it.length / 3);
-    const leg = it.map((x, i) => `<g transform="translate(${(i % 3) * 200},${30 + Math.floor(i / 3) * 18})"><rect width="9" height="9" y="-8" rx="2" fill="${PAL(i)}"/><text x="14">${esc(trunc(x.label, 20))} <tspan class="v">${fmtT(x.value, v.unit === "%" ? "%" : "")}</tspan></text></g>`).join("");
-    return `<svg viewBox="0 0 ${W} ${24 + rows * 18}"><clipPath id="r"><rect width="${W}" height="16" rx="3"/></clipPath><g clip-path="url(#r)">${bars}</g>${leg}</svg>`;
-  },
-  line(v, color) {
-    const p = (v.points || []).filter(q => typeof q.y === "number"); if (p.length < 2) return "";
-    const W = 600, H = 130, L = 40, B = 24, T = 14, ys = p.map(q => q.y);
-    let lo = Math.min(...ys), hi = Math.max(...ys); const pad = (hi - lo) * 0.25 || 1; lo -= pad; hi += pad;
-    const X = i => L + i / (p.length - 1) * (W - L - 20), Y = y => T + (1 - (y - lo) / (hi - lo)) * (H - T - B);
-    const step = Math.ceil(p.length / 8);
-    return `<svg viewBox="0 0 ${W} ${H}"><line x1="${L}" x2="${W - 20}" y1="${H - B}" y2="${H - B}" stroke="var(--line-2)"/>
-      <polyline fill="none" stroke="${color}" stroke-width="2" points="${p.map((q, i) => `${X(i)},${Y(q.y)}`).join(" ")}"/>
-      ${p.map((q, i) => `<circle cx="${X(i)}" cy="${Y(q.y)}" r="3.5" fill="${color}"/><text class="v" x="${X(i)}" y="${Y(q.y) - 7}" text-anchor="middle">${fmtT(q.y, v.unit === "%" ? "" : "")}</text>
-      ${i % step === 0 || i === p.length - 1 ? `<text x="${X(i)}" y="${H - 8}" text-anchor="middle" class="mut">${esc(trunc(q.x, 14))}</text>` : ""}`).join("")}
-      <text x="0" y="${T + 4}" class="mut">${esc(v.unit || "")}</text></svg>`;
-  },
-  flow(v, color) {
-    const s = v.steps || []; if (!s.length) return "";
-    const W = 600, n = s.length, w = W / n;
-    return `<svg viewBox="0 0 ${W} 34">${s.map((x, i) => `<g transform="translate(${i * w},0)">
-      <path d="M0 2 H${w - 12} L${w - 2} 17 L${w - 12} 32 H0 ${i ? `L10 17 Z` : "Z"}" fill="color-mix(in srgb, ${color} ${14 + i * 4}%, var(--surface))" stroke="${color}" stroke-opacity=".5"/>
-      <text x="${w / 2 + (i ? 3 : -3)}" y="21" text-anchor="middle">${esc(trunc(x, Math.max(6, Math.floor(w / 7.2))))}</text></g>`).join("")}</svg>`;
-  },
-  checks(v) {
-    const it = v.items || []; if (!it.length) return "";
-    return `<svg viewBox="0 0 600 ${it.length * 20}">${it.map((x, i) => `<g transform="translate(0,${i * 20})">
-      <circle cx="8" cy="9" r="7" fill="${x.ok ? "var(--win-bg)" : "var(--loss-bg)"}"/>
-      <path d="${x.ok ? "M4.5 9 L7 11.5 L11.5 6.5" : "M5 6 L11 12 M11 6 L5 12"}" stroke="${x.ok ? "var(--win)" : "var(--loss)"}" stroke-width="1.8" fill="none"/>
-      <text x="22" y="13">${esc(trunc(x.label, 80))}</text></g>`).join("")}</svg>`;
-  },
-  compare(v, color) {
-    const r = v.rows || []; if (!r.length) return "";
-    const ma = Math.max(...r.map(x => +x.a || 0)) || 1, mb = Math.max(...r.map(x => +x.b || 0)) || 1, W = 600, RH = 22;
-    return `<svg viewBox="0 0 ${W} ${r.length * RH + 18}"><text x="160" y="11" class="mut">${esc(v.a || "a")}</text><text x="390" y="11" class="mut">${esc(v.b || "b")}</text>
-      ${r.map((x, i) => { const y = 18 + i * RH, wa = (+x.a || 0) / ma * 150, wb = (+x.b || 0) / mb * 150;
-      return `<text x="150" y="${y + 12}" text-anchor="end">${esc(trunc(x.label, 22))}</text>
-        <rect x="160" y="${y + 3}" width="${Math.max(2, wa)}" height="11" rx="2" fill="var(--c5)"/><text class="v" x="${166 + wa}" y="${y + 12}">${fmtT(x.a, "")}</text>
-        <rect x="390" y="${y + 3}" width="${Math.max(2, wb)}" height="11" rx="2" fill="${color}"/><text class="v" x="${396 + wb}" y="${y + 12}">${fmtT(x.b, "")}</text>`; }).join("")}</svg>`;
-  },
-};
+// ---------- visuals: the shared kit (viz.js)
+const viz = NBViz.viz;
 
 // ---------- line-of-work detail
 function openLine(id) {
@@ -385,7 +303,7 @@ function threadHtml(t, showNote) {
     ${t.quote ? `</div><div class="msg" style="border-top:0;padding-bottom:0"><p style="border-left:3px solid var(--accent);padding-left:8px;color:var(--ink-2);font-size:13px">${esc(t.quote)}</p></div><div class="dt-h" style="background:none;padding-top:4px">` : ""}
     <span class="st ${t.thinking ? "s-ongoing" : t.resolved ? "" : t.waiting ? "s-null" : "s-win"}">${state}</span>
     <button class="disc" data-resolve="${esc(t.id)}" data-r="${t.resolved ? "reopen" : "resolve"}">${t.resolved ? "Reopen" : "Resolve"}</button></div>
-    ${t.messages.map(m => `<div class="msg"><div class="who" style="${m.agent ? "color:var(--accent)" : ""}">${esc(m.agent ? "Agent" : m.author)}<span>${when(m.t)}</span></div><p${m.error ? ' style="color:var(--loss)"' : ""}>${esc(m.body)}</p></div>`).join("")}
+    ${t.messages.map(m => `<div class="msg"><div class="who" style="${m.agent ? "color:var(--accent)" : ""}">${esc(m.agent ? "Agent" : m.author)}<span>${when(m.t)}</span></div>${m.spec ? `<div style="margin-top:4px">${NBViz.spec(m.spec, { compact: true })}</div>` : `<p${m.error ? ' style="color:var(--loss)"' : ""}>${esc(m.body)}</p>`}</div>`).join("")}
     ${t.thinking ? `<div class="msg"><div class="who" style="color:var(--accent)">Agent</div><p style="color:var(--ink-3)">reading the evidence…</p></div>` : ""}
     <div class="compose"><textarea placeholder="Reply…" data-reply="${esc(t.id)}"></textarea><div class="acts"><button class="btn pri" data-send-reply="${esc(t.id)}">Reply</button></div></div></div>`;
 }
@@ -417,7 +335,7 @@ function renderAll() { renderTop(); renderTraj(); renderLanes(); renderIndex(); 
 const cmRefresh = () => window.CM && CM.refresh && CM.refresh();
 
 document.addEventListener("click", e => {
-  if (e.target.closest(".cm-rail,.cm-sheet")) return;  // margin comments handle their own buttons (comments.js)
+  if (e.target.closest(".cm-rail,.cm-sheet,.cm-modal")) return;  // margin comments handle their own buttons (comments.js)
   const g = e.target.closest("[data-goto],[data-note],[data-thread],[data-kind],[data-area],[data-clear],[data-chat],[data-info],[data-line],[data-send-new],[data-send-reply],[data-resolve]");
   if (!g) return;
   const D = g.dataset;
