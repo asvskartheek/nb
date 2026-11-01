@@ -1,56 +1,56 @@
-/* Comment threads on papers: section markers, select-to-comment, and a drawer of agent-answered threads. */
-.cm-sec{position:relative}
-.cm-mark{position:absolute;top:6px;right:0;z-index:4;display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 8px;border-radius:6px;
-  border:1px solid var(--line-2);background:var(--surface);color:var(--ink-3);font:600 12px var(--sans);cursor:pointer;opacity:.75}
-.cm-sec:hover .cm-mark,.cm-mark.has{opacity:1}
-.cm-mark.has{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line-2))}
-.cm-mark:hover{color:var(--ink);border-color:var(--ink-3)}
-.cm-sel{position:absolute;z-index:70;display:none;align-items:center;gap:6px;height:30px;padding:0 10px;border-radius:7px;border:0;
-  background:var(--ink);color:var(--bg);font:600 12.5px var(--sans);cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.18)}
-.cm-sel.on{display:inline-flex}
-.cm-fab{position:fixed;right:18px;bottom:18px;z-index:65;display:inline-flex;align-items:center;gap:7px;height:38px;padding:0 14px;border-radius:9px;
-  border:1px solid var(--line-2);background:var(--surface);color:var(--ink);font:600 13px var(--sans);cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.14)}
-.cm-fab .ct{font:600 11px var(--mono);background:var(--accent);color:var(--accent-ink);border-radius:4px;padding:0 5px}
-.cm-fab .live{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:cm-p 1.2s infinite}
-@keyframes cm-p{50%{opacity:.25}}
-.cm-dr{position:fixed;top:0;right:0;bottom:0;width:min(440px,100vw);z-index:80;background:var(--surface);border-left:1px solid var(--line);
-  box-shadow:-10px 0 30px rgba(0,0,0,.14);display:flex;flex-direction:column;transform:translateX(102%);transition:transform .22s ease;font:14px/1.5 var(--sans);color:var(--ink)}
-.cm-dr.open{transform:none}
-.cm-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
-.cm-h b{flex:1;font-size:14px}
-.cm-x{width:30px;height:30px;border:1px solid var(--line-2);border-radius:7px;background:var(--surface);color:var(--ink-2);cursor:pointer}
-.cm-tabs{display:flex;gap:6px;padding:8px 14px;border-bottom:1px solid var(--line)}
-.cm-tab{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:6px;padding:2px 9px;font-size:12px;cursor:pointer}
-.cm-tab.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-.cm-b{flex:1;overflow:auto;padding:12px 14px}
-.cm-new{border:1px dashed var(--line-2);border-radius:10px;padding:10px;margin-bottom:14px}
-.cm-ctx{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;font-size:12px;color:var(--ink-3)}
-.cm-chip{font:600 11px var(--mono);border:1px solid var(--line-2);border-radius:4px;padding:1px 6px;color:var(--ink-2);background:none;cursor:pointer}
-.cm-q{margin:6px 0;padding:4px 9px;border-left:3px solid var(--accent);background:var(--surface-2);border-radius:0 5px 5px 0;font-size:13px;color:var(--ink-2);
-  max-height:84px;overflow:auto;white-space:pre-wrap}
-.cm-in,.cm-ta{width:100%;border:1px solid var(--line-2);border-radius:7px;background:var(--bg);color:var(--ink);font:inherit;padding:6px 9px}
-.cm-in{height:30px;margin-bottom:6px;font-size:13px}
-.cm-ta{min-height:60px;resize:vertical;font-size:14px}
-.cm-acts{display:flex;justify-content:flex-end;gap:6px;margin-top:6px}
-.cm-btn{height:30px;padding:0 12px;border-radius:6px;border:1px solid var(--line-2);background:var(--surface);color:var(--ink);cursor:pointer;font:500 13px var(--sans)}
-.cm-btn.pri{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-.cm-th{border:1px solid var(--line);border-radius:10px;margin-bottom:12px;overflow:hidden}
-.cm-th.res{opacity:.62}
-.cm-thh{display:flex;align-items:center;gap:7px;padding:7px 10px;background:var(--surface-2);font-size:12px;color:var(--ink-3)}
-.cm-thh .sp{flex:1}
-.cm-st{font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.05em;padding:2px 6px;border-radius:4px;background:var(--surface);color:var(--ink-3)}
-.cm-st.think{background:var(--info-bg);color:var(--info)} .cm-st.wait{background:var(--null-bg);color:var(--null)} .cm-st.done{background:var(--win-bg);color:var(--win)}
-.cm-link{border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:12px;padding:0 2px}
-.cm-link:hover{color:var(--ink)}
-.cm-thq{padding:8px 10px 0}
-.cm-m{padding:8px 11px;border-top:1px solid var(--line)}
-.cm-thq+.cm-m{border-top:0}
-.cm-who{font-size:12px;font-weight:600}
-.cm-who.ag{color:var(--accent)}
-.cm-who span{font:400 11px var(--mono);color:var(--ink-3);margin-left:6px}
-.cm-m p{margin:3px 0 0;white-space:pre-wrap;word-wrap:break-word;font-size:14px}
-.cm-m p.err{color:var(--loss)}
-.cm-rep{padding:8px 10px;border-top:1px solid var(--line)}
-.cm-empty{color:var(--ink-3);font-size:13px;text-align:center;padding:20px 0}
-.cm-flash{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:6px;border-radius:8px;transition:outline-color .6s}
-::highlight(cm-quote){background:color-mix(in srgb,var(--accent) 28%,transparent);color:inherit}
+/* Margin comments on papers, Google Docs style: cards beside their passage, highlighted anchors, ＋ on selection. */
+html.cm-on body{padding-right:var(--cm-w,320px)}
+::highlight(cm-anc){background:color-mix(in srgb,#f2c94c 34%,transparent)}
+::highlight(cm-act){background:color-mix(in srgb,#f2a93b 62%,transparent)}
+.cm-rail{position:absolute;top:0;width:296px;height:0;z-index:30;display:none;font:13.5px/1.45 var(--sans);color:var(--ink)}
+.cm-card{position:absolute;left:0;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);cursor:pointer;transition:top .18s ease,left .18s ease,box-shadow .15s}
+.cm-card:hover{box-shadow:0 1px 3px rgba(0,0,0,.12),0 2px 8px rgba(0,0,0,.06)}
+.cm-card.act{left:-14px;cursor:default;border-color:var(--line-2);box-shadow:0 2px 6px rgba(0,0,0,.14),0 8px 24px rgba(0,0,0,.10);z-index:2}
+.cm-card.res{opacity:.6}
+.cm-tools{position:absolute;top:8px;right:8px;display:flex;gap:2px}
+.cm-ic{width:26px;height:26px;border-radius:50%;border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:15px;line-height:1}
+.cm-ic:hover{background:var(--surface-2);color:var(--ink)} .cm-ic.ok:hover{color:var(--win)}
+.cm-msg+.cm-msg{margin-top:12px}
+.cm-mh{display:flex;align-items:center;gap:8px;padding-right:30px}
+.cm-mh b{display:block;font-size:13px;font-weight:600;line-height:1.2}
+.cm-mh span{display:block;font-size:11.5px;color:var(--ink-3)}
+.cm-av{width:28px;height:28px;flex:none;border-radius:50%;display:grid;place-items:center;color:#fff;font:600 11px var(--sans)}
+.cm-av.ai{background:var(--accent);color:var(--accent-ink)}
+.cm-body{margin:6px 0 0;white-space:pre-wrap;word-wrap:break-word;font-size:13.5px}
+.cm-card:not(.act) .cm-body{display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.cm-body.err{color:var(--loss)}
+.cm-more{margin-top:8px;font-size:12px;color:var(--accent);font-weight:600}
+.cm-think{display:flex;align-items:center;gap:4px;margin-top:10px}
+.cm-think .cm-av{width:22px;height:22px;font-size:9px;margin-right:4px}
+.cm-think i{width:6px;height:6px;border-radius:50%;background:var(--ink-3);animation:cm-b 1s infinite}
+.cm-think i:nth-child(3){animation-delay:.15s} .cm-think i:nth-child(4){animation-delay:.3s}
+@keyframes cm-b{0%,80%,100%{opacity:.25}40%{opacity:1}}
+.cm-card textarea,.cm-name{width:100%;margin-top:8px;border:1px solid var(--line-2);border-radius:18px;background:var(--surface);color:var(--ink);
+  font:inherit;padding:7px 12px;resize:none;outline:none}
+.cm-name{border-radius:6px;height:30px}
+.cm-card textarea:focus,.cm-name:focus{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.cm-card.new textarea{border-radius:6px;min-height:52px}
+.cm-reply{margin-top:10px;border-top:1px solid var(--line);padding-top:2px}
+.cm-reply .cm-btns{display:none} .cm-reply:focus-within .cm-btns{display:flex}
+.cm-btns{display:flex;gap:6px;margin-top:8px}
+.cm-b{height:30px;padding:0 14px;border-radius:15px;border:1px solid transparent;background:none;color:var(--accent);font:600 13px var(--sans);cursor:pointer}
+.cm-b:hover{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.cm-b.pri{background:var(--accent);color:var(--accent-ink)}
+.cm-b.pri:hover{filter:brightness(1.08)}
+.cm-add{position:absolute;z-index:60;display:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--line-2);background:var(--surface);
+  color:var(--accent);cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.16);place-items:center}
+.cm-add.on{display:grid}
+.cm-add:hover{background:var(--surface-2)}
+.cm-tog{position:relative;display:inline-flex;align-items:center;gap:4px;height:32px;min-width:32px;padding:0 8px;border:1px solid var(--line-2);border-radius:7px;
+  background:var(--surface);color:var(--ink-2);cursor:pointer;font:600 12px var(--sans)}
+.cm-tog:hover,.cm-tog.on{color:var(--ink);border-color:var(--ink-3)}
+.cm-tog b{font:600 11px var(--mono)}
+.cm-tog i{position:absolute;top:4px;right:4px;width:6px;height:6px;border-radius:50%;background:var(--accent);animation:cm-b 1.2s infinite}
+.cm-tog-float{position:fixed;top:12px;right:12px;z-index:60}
+.cm-sheet{position:fixed;left:0;right:0;bottom:0;z-index:70;max-height:62vh;overflow:auto;background:var(--surface);border-top:1px solid var(--line);
+  border-radius:14px 14px 0 0;box-shadow:0 -8px 30px rgba(0,0,0,.18);padding:6px 14px 16px;transform:translateY(105%);transition:transform .2s ease;
+  font:14px/1.45 var(--sans);color:var(--ink)}
+.cm-sheet.on{transform:none}
+.cm-sheet .cm-card{position:relative;left:0;top:auto!important;border:0;box-shadow:none;padding:6px 0}
+.cm-grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:4px auto 8px}
