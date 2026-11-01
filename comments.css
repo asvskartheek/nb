@@ -54,3 +54,20 @@ html.cm-on body{padding-right:var(--cm-w,320px)}
 .cm-sheet.on{transform:none}
 .cm-sheet .cm-card{position:relative;left:0;top:auto!important;border:0;box-shadow:none;padding:6px 0}
 .cm-grab{width:36px;height:4px;border-radius:2px;background:var(--line-2);margin:4px auto 8px}
+/* element anchors and the C picker */
+.cm-boxes{position:absolute;left:0;top:0;width:0;height:0;z-index:25;pointer-events:none}
+.cm-box{position:absolute;border-radius:4px;background:color-mix(in srgb,#f2c94c 18%,transparent);outline:2px solid color-mix(in srgb,#f2c94c 70%,transparent)}
+.cm-box.act{background:color-mix(in srgb,#f2a93b 24%,transparent);outline-color:#f2a93b}
+.cm-what{font:500 11px var(--mono);color:var(--ink-3);background:var(--surface-2);border-radius:4px;padding:2px 6px;margin:-2px 30px 8px 0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+html.cm-picking,html.cm-picking *{cursor:crosshair!important}
+.cm-pick{position:fixed;z-index:90;display:none;pointer-events:none;border-radius:3px;outline:2px solid var(--accent);
+  background:color-mix(in srgb,var(--accent) 12%,transparent);transition:all .06s}
+.cm-ptag{position:fixed;z-index:91;display:none;pointer-events:none;max-width:360px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:var(--accent);color:var(--accent-ink);font:600 11px var(--mono);padding:3px 7px;border-radius:4px}
+.cm-phint{position:fixed;left:50%;bottom:18px;transform:translate(-50%,160%);visibility:hidden;z-index:92;display:flex;gap:14px;align-items:center;
+  background:var(--ink);color:var(--bg);font:13px var(--sans);padding:9px 16px;border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.25);transition:transform .18s,visibility .18s;white-space:nowrap}
+.cm-phint.on{transform:translate(-50%,0);visibility:visible}
+.cm-phint span{opacity:.8;font-size:12px}
+.cm-phint kbd{font:600 11px var(--mono);background:color-mix(in srgb,var(--bg) 18%,transparent);border-radius:4px;padding:1px 5px;margin-right:3px}
+@media (max-width:640px){.cm-phint{gap:8px;font-size:12px}.cm-phint span:nth-child(n+3){display:none}}

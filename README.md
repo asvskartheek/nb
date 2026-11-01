@@ -12,6 +12,7 @@ NOTEBOOK_PROJECT="/path/to/project" python notebook/server.py --port 8765
   starts its own headless `claude -p` run with read-only tools in `NOTEBOOK_PROJECT`; up to `--agents` (default 4)
   answer at once and each posts back into its own chat.
 - Papers live in `papers/*.html` (listed at `/papers/`). A paper becomes commentable by including
-  `<link rel="stylesheet" href="../comments.css"><script src="../comments.js" defer></script>`: every `<section id>`
-  gets a comment marker, selecting text offers **Comment** with the quote, and each thread gets its own agent like note chats.
+  `<link rel="stylesheet" href="../comments.css"><script src="../comments.js" defer></script>`; papers anchor in `<section id>`,
+  and the notebook's notes share the same margin comments (Google Docs style). Select text and press the margin ＋, or press
+  **C** to pick any element (↑/↓ parent/child, Esc cancels); each thread gets its own agent like note chats.
 - No build step: `index.html`, `style.css`, `app.js`.

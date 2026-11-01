@@ -224,6 +224,7 @@ function renderLog() {
     h += `</section>`;
   }
   $("#log").innerHTML = h;
+  cmRefresh();
 }
 
 function card(n, dc) {
@@ -236,7 +237,7 @@ function card(n, dc) {
       ${n.status && !["done"].includes(n.status) ? `<span class="st s-${esc(n.status)}">${esc(n.status)}</span>` : ""}
       <button class="thr" data-thread="${esc(t.id)}"><i style="background:${t.color}"></i>${esc(t.title)}</button>
       <span class="grow"></span>
-      <button class="disc${dc ? " has" : ""}" data-chat="${esc(n.id)}" title="Discuss with the agent">${chatIcon}${dc ? dc : ""}</button></div>
+      <button class="disc${dc ? " has" : ""}" data-chat="${esc(n.id)}" title="Comment (or press C and pick any element)">${chatIcon}${dc ? dc : ""}</button></div>
     <h3 class="title">${esc(n.title)}</h3>
     ${facts.length ? `<ul class="facts">${facts.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
     ${metrics(n.metrics)}
@@ -379,7 +380,7 @@ function threadHtml(t, showNote) {
   const state = t.resolved ? "resolved" : t.thinking ? "agent answering…" : t.waiting ? "queued for agent" : "answered";
   const paper = String(t.note).startsWith("paper:") && t.note.slice(6).split("#");
   const head = paper ? `<a href="papers/${esc(paper[0])}.html#${esc(paper[1] || "")}" style="color:var(--accent)">Paper ${esc(paper[0])} § ${esc(t.label || paper[1] || "whole")}</a>`
-    : `<a data-goto="${esc(t.note)}">${esc(n ? n.title : "Whole notebook")}</a>`;
+    : `<a data-goto="${esc(t.note)}" data-cm="${esc(t.id)}">${esc(n ? n.title : "Whole notebook")}</a>`;
   return `<div class="dthread${t.resolved ? " resolved" : ""}"><div class="dt-h">${showNote ? head : `<span style="flex:1">${when(t.t)}</span>`}
     ${t.quote ? `</div><div class="msg" style="border-top:0;padding-bottom:0"><p style="border-left:3px solid var(--accent);padding-left:8px;color:var(--ink-2);font-size:13px">${esc(t.quote)}</p></div><div class="dt-h" style="background:none;padding-top:4px">` : ""}
     <span class="st ${t.thinking ? "s-ongoing" : t.resolved ? "" : t.waiting ? "s-null" : "s-win"}">${state}</span>
@@ -390,15 +391,6 @@ function threadHtml(t, showNote) {
 }
 const composer = (note, ph) => `<div class="newc"><input class="who-in" placeholder="Your name" value="${esc(me())}" data-me>
   <textarea placeholder="${esc(ph)}" data-new="${esc(note)}"></textarea><div class="acts"><button class="btn pri" data-send-new="${esc(note)}">Ask the agent</button></div></div>`;
-function openNoteChat(id) {
-  const n = S.byId[id]; if (!n) return;
-  drawerView = () => {
-    const ts = S.disc.filter(t => t.note === id).sort((a, b) => b.t - a.t);
-    paintDrawer("Discuss: " + n.title, `<div class="dr-sub">${dayLabel(dayKey(n.ts))} ${hhmm(n.ts)} · ${esc(S.threads[n.thread].title)} · each chat gets its own agent; several run at once.</div>
-      ${composer(id, "Start a new chat about this note…")}${ts.map(t => threadHtml(t, false)).join("")}`);
-  };
-  drawerView(); showDrawer();
-}
 function openChats() {
   drawerView = () => {
     const ts = [...S.disc].sort((a, b) => (b.thinking - a.thinking) || (b.waiting - a.waiting) || (b.messages.at(-1).t - a.messages.at(-1).t));
@@ -422,18 +414,19 @@ function goto(id) {
   el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1600);
 }
 function renderAll() { renderTop(); renderTraj(); renderLanes(); renderIndex(); renderLog(); }
+const cmRefresh = () => window.CM && CM.refresh && CM.refresh();
 
 document.addEventListener("click", e => {
   const g = e.target.closest("[data-goto],[data-note],[data-thread],[data-kind],[data-area],[data-clear],[data-chat],[data-info],[data-line],[data-send-new],[data-send-reply],[data-resolve]");
   if (!g) return;
   const D = g.dataset;
-  if (D.goto) { goto(D.goto); if (innerWidth < 900) closeDrawer(); }
+  if (D.goto) { goto(D.goto); if (D.cm) { closeDrawer(); setTimeout(() => window.CM && CM.open(D.cm), 450); } else if (innerWidth < 900) closeDrawer(); }
   else if (D.note) goto(D.note);
   else if (D.thread) setThread(S.thread === D.thread ? null : D.thread);
   else if (D.kind) { S.kind = S.kind === D.kind ? null : D.kind; renderAll(); }
   else if (D.area) { S.area = S.area === D.area ? null : D.area; S.thread = null; renderAll(); }
   else if (D.clear) { if (D.clear === "q") { S.q = ""; $("#q").value = ""; } else S[D.clear] = null; if (D.clear === "thread") history.replaceState(null, "", location.pathname); renderAll(); }
-  else if (D.chat) openNoteChat(D.chat);
+  else if (D.chat) window.CM && CM.commentOn(D.chat);
   else if (D.info) openLine(D.info);
   else if (D.line) openLine(D.line);
   else if (D.sendNew) { const ta = document.querySelector(`[data-new="${CSS.escape(D.sendNew)}"]`), w = document.querySelector("[data-me]");

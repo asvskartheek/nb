@@ -91,7 +91,7 @@ def discussion() -> list[dict]:
     for e in events():
         if e.get("kind") == "comment":
             th[e["id"]] = dict(id=e["id"], note=e.get("note"), t=e["t"], resolved=False, quote=e.get("quote"),
-                               label=e.get("label"),
+                               label=e.get("label"), path=e.get("path"), what=e.get("what"),
                                messages=[dict(id=e["id"], t=e["t"], author=e["author"], body=e["body"], agent=False)])
         elif e.get("parent") in th:
             t = th[e["parent"]]
@@ -118,7 +118,7 @@ def post(d: dict) -> dict | None:
             return None
         # note: a note id, "_notebook" (the whole notebook) or "paper:<name>#<section id>"; quote: the text selected
         ev.update(note=str(d["note"])[:120], body=body)
-        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label") if d.get(k)})
+        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label", "path", "what") if d.get(k)})  # what: the picked element
     else:
         ids = {e["id"] for e in events() if e.get("kind") == "comment"}
         if d.get("parent") not in ids or (kind == "reply" and not body):
@@ -148,6 +148,8 @@ def prompt(th: dict) -> str:
     if str(th["note"]).startswith("paper:"):
         name, _, sec = th["note"][6:].partition("#")
         return paper_prompt(name, sec, th, chat)
+    pointed = (f"\nThey pointed at: {th['what']}" if th.get("what") else "") + \
+              (f"\nThe text there:\n> {th['quote']}" if th.get("quote") else "")
     about = (f"The note:\n{json.dumps(note, indent=1)}\n\nIts line of work:\n{json.dumps(thread, indent=1)}\n\n"
              f"Its thread's notes (titles):\n" + "\n".join(f"- {n['ts']} [{n.get('kind')}] {n.get('title')}"
                 for n in nb["notes"] if note and n.get("thread") == note.get("thread"))) if note else \
@@ -157,6 +159,7 @@ The notebook's notes live in {DATA}/notes-*.json. The project's code, git histor
 logs/ and .research/ are the evidence. Read what you need (read-only), then answer.
 
 {about}
+{pointed}
 
 The chat so far:
 {chat}
@@ -168,7 +171,8 @@ Answer the last message. Be short and concrete: lead with the answer, give numbe
 def paper_prompt(name: str, sec: str, th: dict, chat: str) -> str:
     f = HERE / "papers" / f"{Path(name).name}.html"
     where = f"section id=\"{sec}\"" + (f" ({th['label']})" if th.get("label") else "") if sec else "the whole paper"
-    quote = f"\nThe passage they selected:\n> {th['quote']}\n" if th.get("quote") else ""
+    quote = (f"\nThe element they picked: {th['what']}" if th.get("what") else "") + \
+            (f"\nThe text there:\n> {th['quote']}\n" if th.get("quote") else "")
     return f"""You answer a comment thread on a research paper of the project in this folder.
 The paper is {f} (one self-contained HTML file; numbers live in inline JS/JSON). The comment is on {where}.{quote}
 The project's code, git history, .research/ (ledger: models.json, decisions.jsonl, tasks/), experiments/,
