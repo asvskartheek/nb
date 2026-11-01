@@ -5,6 +5,9 @@
 // Anchor a comment on selected text (the margin ＋, or Ctrl/Cmd+Alt+M), on any element (press C, point, click), or on
 // a region you draw (C then T, drag a box): the region is captured as an image and the agent reads it.
 // Anchors live inside a root: a paper's <section id> or a note's <article class="card" id>; outside one, the page.
+// Replies are visual (ANSWERS.md): agents answer with a spec drawn by viz.js (expand for the full card); people reply
+// with a quick-reply chip, a slash command (/yes /no /bars a=3,b=5 /delta label 151→154), short text, or by pointing
+// at an element or drawing a box from the reply box.
 (() => {
   "use strict";
   const IS_PAPER = /\/papers\//.test(location.pathname);
@@ -32,10 +35,12 @@
   const initials = n => (n || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const hue = n => [...(n || "")].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 200);
   const HL = !!(window.CSS && CSS.highlights && typeof Highlight !== "undefined");
-  const UI = ".cm-rail,.cm-sheet,.cm-add,.cm-tog,.cm-pick,.cm-ptag,.cm-phint,.cm-boxes,.cm-draw";
+  const UI = ".cm-rail,.cm-sheet,.cm-add,.cm-tog,.cm-pick,.cm-ptag,.cm-phint,.cm-boxes,.cm-draw,.cm-modal";
   const BASE = IS_PAPER ? "../" : "";
 
   let all = [], active = null, draft = null, showResolved = false, anc = {};
+  const replyText = {}, replyAtt = {};  // per thread: the reply being written, and what it points at
+  let attachFor = null;                  // a thread whose reply box asked to point or draw
 
   // ---------- furniture
   const el = (tag, cls) => { const e = document.createElement(tag); e.className = cls; return e; };
@@ -47,7 +52,8 @@
   const HINT_PICK = "<b>Pick an element to comment on</b><span><kbd>Click</kbd> pick</span><span><kbd>↑</kbd> parent</span><span><kbd>↓</kbd> child</span><span><kbd>T</kbd> draw a box</span><span><kbd>Esc</kbd> cancel</span>";
   const HINT_DRAW = "<b>Drag a box around what you want to comment on</b><span>it is captured for the agent</span><span><kbd>Esc</kbd> cancel</span>";
   phint.innerHTML = HINT_PICK;
-  document.body.append(boxes, rail, add, sheet, pbox, ptag, phint, pad);
+  const modal = el("div", "cm-modal");
+  document.body.append(boxes, rail, add, sheet, pbox, ptag, phint, pad, modal);
   const tog = el("button", "cm-tog");
   const themeBtn = document.querySelector("header #theme");
   themeBtn ? themeBtn.before(tog) : (tog.classList.add("cm-tog-float"), document.body.append(tog));
@@ -186,22 +192,81 @@
   }
   const avatar = (name, agent) => agent ? `<span class="cm-av ai">AI</span>`
     : `<span class="cm-av" style="background:hsl(${hue(name)} 55% 46%)">${esc(initials(name))}</span>`;
-  const msg = m => `<div class="cm-msg"><div class="cm-mh">${avatar(m.author, m.agent)}<div><b>${esc(m.agent ? "Agent" : m.author)}</b><span>${when(m.t)}</span></div></div>
-      <div class="cm-body${m.error ? " err" : ""}">${esc(m.body)}</div></div>`;
+  const V = () => window.NBViz;
+  const attachHtml = m => (m.what ? `<div class="cm-what" title="${esc(m.what)}">${esc(clean(m.what, 48))}</div>` : "")
+    + (m.shot ? `<a class="cm-shot" href="${esc(BASE + m.shot)}" target="_blank"><img src="${esc(BASE + m.shot)}" alt="drawn region"></a>` : "");
+  function msg(m, t, on, redrawn) {
+    const head = `<div class="cm-mh">${avatar(m.author, m.agent)}<div><b>${esc(m.agent ? "Agent" : m.author)}</b><span>${when(m.t)}</span></div></div>`;
+    let body;
+    if (m.agent && m.spec && !m.error) {
+      const orig = m.redraws && t.messages.find(x => x.id === m.redraws);
+      body = `<div class="cm-spec">${V() ? V().spec(m.spec, { compact: true }) : esc(m.body)}</div>
+        <div class="cm-acts2"><button class="cm-xp" data-expand="${esc(t.id)}|${esc(m.id)}">Expand</button>
+        ${orig ? `<details class="cm-orig"><summary>original text</summary><div>${esc(orig.body)}</div></details>` : ""}</div>`;
+    } else if (m.agent && m.error && m.raw) {
+      body = `<div class="cm-fail"><b>Could not visualise</b><span>${esc((m.violations || [])[0] || "")}</span></div>
+        <details class="cm-orig"><summary>raw answer (unchecked)</summary><div>${esc(m.raw)}</div></details>`;
+    } else if (m.agent && !m.error) {  // an answer from before answers were visual
+      body = `<div class="cm-body cm-old">${esc(m.body)}</div>${redrawn ? "" : `<button class="cm-xp" data-redraw="${esc(t.id)}|${esc(m.id)}">${t.thinking ? "Visualising…" : "Visualise"}</button>`}`;
+    } else if (m.chip) {
+      body = `<div class="cm-chipmsg">${esc(m.body)}</div>`;
+    } else {
+      body = attachHtml(m) + (m.spec && V() ? `<div class="cm-spec">${V().spec(m.spec, { compact: false })}</div>` : "")
+        + (m.body ? `<div class="cm-body${m.error ? " err" : ""}">${esc(m.body)}</div>` : "");
+    }
+    return `<div class="cm-msg">${head}${body}</div>`;
+  }
   const target = t => (t.what || t.state ? `<div class="cm-what" title="${esc([t.what, t.state && "view: " + viewLabel(t.state)].filter(Boolean).join(" · "))}">${esc(clean([t.what, t.state && "in " + viewLabel(t.state)].filter(Boolean).join(" · "), 56))}</div>` : "")
     + (t.shot ? `<a class="cm-shot" href="${esc(BASE + t.shot)}" target="_blank" title="The region the agent sees"><img src="${esc(BASE + t.shot)}" alt="drawn region"></a>` : "");
+  const shown = t => { const re = new Set(t.messages.map(m => m.redraws).filter(Boolean)); return t.messages.filter(m => !re.has(m.id)); };
+  function quick(t) {  // the agent's follow-ups, one click each
+    const last = t.messages.at(-1);
+    if (t.resolved || t.thinking || !last.agent || !last.spec || !(last.spec.replies || []).length) return "";
+    return `<div class="cm-qrs">${last.spec.replies.slice(0, 3).map(r => `<button class="cm-qr" data-qr="${esc(t.id)}" data-text="${esc(r)}">${esc(r)}</button>`).join("")}</div>`;
+  }
+  function replyBox(t) {
+    const a = replyAtt[t.id], txt = replyText[t.id] || "", sl = slash(txt);
+    return `<div class="cm-reply${txt || a ? " live" : ""}">
+      ${a ? `<div class="cm-attd">${a.shot ? `<img src="${a.shot}" alt="">` : a.rect ? `<span class="cm-wait">capturing…</span>` : ""}<span>${esc(clean(a.what || "", 40))}</span><button class="cm-link" data-unatt="${esc(t.id)}" title="Remove">✕</button></div>` : ""}
+      <textarea rows="1" placeholder="Reply, or / for a visual" data-reply="${esc(t.id)}">${esc(txt)}</textarea>
+      <div class="cm-prev" data-prev="${esc(t.id)}">${sl && V() ? V().spec(sl, {}) : txt.startsWith("/") ? `<span class="cm-hint">/yes · /no · /unsure · /bars a=3, b=5 · /split a=3, b=4 · /delta label 151→154</span>` : ""}</div>
+      <div class="cm-btns"><button class="cm-b pri" data-send-reply="${esc(t.id)}">Reply</button>
+        <button class="cm-att" data-att-pick="${esc(t.id)}" title="Point at an element (C)">◎ Point</button>
+        <button class="cm-att" data-att-draw="${esc(t.id)}" title="Draw a box (C then T)">▭ Box</button>
+        <button class="cm-b" data-cancel>Cancel</button></div></div>`;
+  }
   function card(t) {
-    const on = t.id === active, first = t.messages[0], rest = t.messages.slice(1);
+    const on = t.id === active, list = shown(t), first = list[0], rest = list.slice(1);
+    const redrawn = new Set(t.messages.map(m => m.redraws).filter(Boolean));
     return `<div class="cm-card${on ? " act" : ""}${t.resolved ? " res" : ""}" data-id="${esc(t.id)}">
       <div class="cm-tools">${t.resolved ? `<button class="cm-ic" data-reopen="${esc(t.id)}" title="Re-open">↺</button>`
         : `<button class="cm-ic ok" data-resolve="${esc(t.id)}" title="Mark as resolved">✓</button>`}</div>
-      ${target(t)}${msg(first)}
-      ${on ? rest.map(msg).join("") : rest.length ? `<div class="cm-more">${rest.length} repl${rest.length > 1 ? "ies" : "y"}${rest.at(-1).agent ? " · Agent" : ""}</div>` : ""}
+      ${target(t)}${msg(first, t, on)}
+      ${on ? rest.map(m => msg(m, t, on, redrawn.has(m.id))).join("") : rest.length ? `<div class="cm-more">${rest.length} repl${rest.length > 1 ? "ies" : "y"}${rest.at(-1).agent ? " · Agent" : ""}</div>${rest.at(-1).agent && rest.at(-1).spec ? msg(rest.at(-1), t, false) : ""}` : ""}
       ${t.thinking ? `<div class="cm-think"><span class="cm-av ai">AI</span><i></i><i></i><i></i></div>` : ""}
-      ${on && !t.resolved ? `<div class="cm-reply"><textarea rows="1" placeholder="Reply" data-reply="${esc(t.id)}"></textarea>
-        <div class="cm-btns"><button class="cm-b pri" data-send-reply="${esc(t.id)}">Reply</button><button class="cm-b" data-cancel>Cancel</button></div></div>` : ""}
+      ${on ? quick(t) : ""}
+      ${on && !t.resolved ? replyBox(t) : ""}
     </div>`;
   }
+  // slash commands: a person's visual reply
+  function slash(txt) {
+    const m = String(txt || "").trim().match(/^\/(\w+)\s*(.*)$/s); if (!m) return null;
+    const [, cmd, rest] = m, pairs = s => s.split(/[,;\n]/).map(x => x.split(/[=:]/)).filter(x => x.length === 2 && isFinite(+x[1]) && x[0].trim())
+      .map(([l, v]) => ({ label: l.trim().slice(0, 40), value: +v }));
+    if (/^(yes|no|unsure|partly)$/.test(cmd)) return { verdict: cmd, headline: clean(rest, 60) || undefined, blocks: [] };
+    if (cmd === "bars" || cmd === "split") { const items = pairs(rest); return items.length ? { blocks: [{ type: cmd, items }] } : null; }
+    if (cmd === "delta") { const d = rest.match(/^(.*?)\s*(-?[\d.]+)\s*(?:→|->|to)\s*(-?[\d.]+)\s*(\S*)$/);
+      return d ? { blocks: [{ type: "delta", label: d[1].trim() || "value", before: +d[2], after: +d[3], unit: d[4] || "" }] } : null; }
+    return null;
+  }
+  function openModal(tid, mid) {
+    const t = all.find(x => x.id === tid), m = t && t.messages.find(x => x.id === mid);
+    if (!m || !m.spec || !V()) return;
+    modal.innerHTML = `<div class="cm-mbox" role="dialog" aria-label="Answer"><div class="cm-mtop"><span>${esc(clean(t.label || MODE.labelOf(MODE.rootOf(t)), 60))}</span>
+      <button class="cm-ic" data-mclose title="Close">✕</button></div>${V().spec(m.spec, {})}${t.id === active || true ? quick(t) : ""}</div>`;
+    modal.classList.add("on");
+  }
+  const closeModal = () => modal.classList.remove("on");
   function newCard() {
     return `<div class="cm-card act new" data-id="_draft">
       ${draft.what ? `<div class="cm-what">${esc(clean(draft.what, 48))}</div>` : ""}
@@ -265,6 +330,7 @@
     const tip = e.getAttribute("data-tip") || e.getAttribute("aria-label") || e.getAttribute("title");
     const quote = clean(tip || e.textContent, 300);
     stopPick();
+    if (attachFor) { replyAtt[attachFor] = { what: describe(e), quote, path: pathOf(base, e) }; active = attachFor; attachFor = null; render(); return; }
     startDraft({ key: MODE.keyOf(root), label: MODE.labelOf(root), path: e === base ? "" : pathOf(base, e), what: describe(e), quote,
       anchor: { el: e, root: base, whole: e === base && base === document.body } });
   }
@@ -303,6 +369,11 @@
     const mid = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
     const root = mid && !mid.closest(UI) ? mid.closest(MODE.roots) : null, base = root || document.body, b = base.getBoundingClientRect();
     const box = { x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), w: Math.round(r.width), h: Math.round(r.height) };
+    if (attachFor) {  // a box drawn from a reply: the screenshot goes with the reply
+      const tid = attachFor, a = { what: `region ${box.w}×${box.h} in ${MODE.labelOf(root)}`, quote: textIn(r, base), rect: true };
+      a.capture = capture(r).then(u => { a.shot = u; }, () => { a.failed = true; }).finally(() => { if (replyAtt[tid] === a) render(); });
+      replyAtt[tid] = a; active = tid; attachFor = null; render(); return;
+    }
     const d = { key: MODE.keyOf(root), label: MODE.labelOf(root), rect: `${box.x},${box.y},${box.w},${box.h}`,
       what: `region ${box.w}×${box.h} in ${MODE.labelOf(root)}`, quote: textIn(r, base), anchor: { box: { base, ...box }, root: base } };
     d.capture = capture(r).then(url => { d.shot = url; }, err => { d.shotFailed = true; console.warn("region capture failed", err); })
@@ -345,10 +416,11 @@
 
   document.addEventListener("keydown", e => {
     const typing = e.target.matches && e.target.matches("input,textarea,select,[contenteditable],[contenteditable] *");
-    if (drawing) { e.preventDefault(); e.stopPropagation(); if (e.key === "Escape") stopDraw(); return; }
+    if (drawing) { e.preventDefault(); e.stopPropagation(); if (e.key === "Escape") { stopDraw(); attachFor = null; } return; }
+    if (e.key === "Escape" && modal.classList.contains("on")) { closeModal(); return; }
     if (picking) {
       e.preventDefault(); e.stopPropagation();
-      if (e.key === "Escape") stopPick();
+      if (e.key === "Escape") { stopPick(); attachFor = null; }
       else if (e.key === "ArrowUp" && hov && hov.parentElement && hov.parentElement !== document.documentElement) { hov = hov.parentElement; stepped = true; drawPick(); }
       else if (e.key === "ArrowDown" && hov && hov.firstElementChild) { hov = hov.firstElementChild; stepped = true; drawPick(); }
       else if (e.key === "Enter") pick(hov);
@@ -365,6 +437,24 @@
   document.addEventListener("click", async e => {
     if (picking) return;
     const inUI = e.target.closest(".cm-rail,.cm-sheet");
+    if (e.target.closest(".cm-modal")) {
+      if (e.target.closest("[data-mclose]") || e.target === modal) closeModal();
+      const q = e.target.closest("[data-qr]"); if (q) { closeModal(); await send({ kind: "reply", parent: q.dataset.qr, body: q.dataset.text, chip: true }); render(); }
+      const r = e.target.closest(".sp-ref"); if (r) evidence(r.dataset.ref);
+      return;
+    }
+    const x = e.target.closest("[data-expand],[data-redraw],[data-qr],[data-att-pick],[data-att-draw],[data-unatt],.sp-ref");
+    if (x && inUI) {
+      const D = x.dataset;
+      if (D.expand) openModal(...D.expand.split("|"));
+      else if (D.redraw) { const [tid, mid] = D.redraw.split("|"); await send({ kind: "redraw", parent: tid, target: mid }); render(); }
+      else if (D.qr) { await send({ kind: "reply", parent: D.qr, body: D.text, chip: true }); render(); }
+      else if (D.attPick) { attachFor = D.attPick; startPick(); }
+      else if (D.attDraw) { attachFor = D.attDraw; startDraw(); }
+      else if (D.unatt) { delete replyAtt[D.unatt]; render(); }
+      else if (x.classList.contains("sp-ref")) evidence(D.ref);
+      return;
+    }
     const b = e.target.closest("[data-send],[data-send-reply],[data-resolve],[data-reopen],[data-cancel]");
     if (b && inUI) {
       const D = b.dataset;
@@ -378,11 +468,17 @@
           rect: d.rect, shot: d.shot, state: st });
         if (ev) { draft = null; active = ev.id; render(); }
       } else if (D.sendReply) {
-        const ta = document.querySelector(`[data-reply="${CSS.escape(D.sendReply)}"]`); if (!ta.value.trim()) return ta.focus();
-        if (await send({ kind: "reply", parent: D.sendReply, body: ta.value })) render();
+        const tid = D.sendReply, ta = document.querySelector(`[data-reply="${CSS.escape(tid)}"]`), a = replyAtt[tid];
+        const txt = ta.value.trim(), sl = slash(txt);
+        if (!txt && !a) return ta.focus();
+        if (txt.startsWith("/") && !sl) return ta.focus();  // an unfinished command: the preview shows the forms
+        if (a && a.capture) await a.capture;
+        const ok = await send({ kind: "reply", parent: tid, body: sl ? "" : txt, spec: sl || undefined,
+          what: a && a.what, quote: a && a.quote, path: a && a.path, shot: a && a.shot });
+        if (ok) { delete replyText[tid]; delete replyAtt[tid]; render(); }
       } else if (D.resolve) { await send({ kind: "resolve", parent: D.resolve }); active = null; render(); }
       else if (D.reopen) { await send({ kind: "reopen", parent: D.reopen }); render(); }
-      else if (D.cancel !== undefined) { draft = null; active = null; render(); }
+      else if (D.cancel !== undefined) { if (active) { delete replyText[active]; delete replyAtt[active]; } draft = null; active = null; render(); }
       return;
     }
     const c = e.target.closest(".cm-card");
@@ -398,6 +494,23 @@
     if (hit) { active = hit.id; draft = null; render(); }
     else if ((active || draft) && getSelection().isCollapsed) { active = null; draft = null; render(); }
   });
+  document.addEventListener("input", e => {
+    const ta = e.target.closest && e.target.closest("[data-reply]"); if (!ta) return;
+    const tid = ta.dataset.reply; replyText[tid] = ta.value;
+    const pv = document.querySelector(`[data-prev="${CSS.escape(tid)}"]`), sl = slash(ta.value);
+    if (pv) pv.innerHTML = sl && V() ? V().spec(sl, {}) : ta.value.startsWith("/") ? `<span class="cm-hint">/yes · /no · /unsure · /bars a=3, b=5 · /split a=3, b=4 · /delta label 151→154</span>` : "";
+    ta.closest(".cm-reply").classList.toggle("live", !!ta.value);
+    if (rail.children.length) layout();
+  });
+  // evidence chips: a note id opens the note, a paper section scrolls to it, anything else is shown as is
+  function evidence(ref) {
+    const r = String(ref || "").trim();
+    const note = r.match(/\bn-[\w-]+/), sec = r.match(/^§\s*([\w-]+)/) || (IS_PAPER && r.match(/^(s\d+|apx)$/));
+    if (note && !IS_PAPER && window.goto) { closeModal(); window.goto(note[0]); return; }
+    if (sec && document.getElementById(sec[1])) { closeModal(); document.getElementById(sec[1]).scrollIntoView({ behavior: "smooth", block: "start" }); return; }
+    try { navigator.clipboard.writeText(r); } catch (x) {}
+    const tip = el("div", "cm-toast"); tip.textContent = `copied: ${r}`; document.body.append(tip); setTimeout(() => tip.remove(), 1600);
+  }
   let mt;
   new MutationObserver(ms => {
     if (ms.every(m => (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest(UI))) return;
