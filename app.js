@@ -241,7 +241,9 @@ function card(n, dc) {
     ${facts.length ? `<ul class="facts">${facts.map(f => `<li>${esc(f)}</li>`).join("")}</ul>` : ""}
     ${metrics(n.metrics)}
     ${n.viz ? `<div class="viz">${viz(n.viz, t.color)}</div>` : ""}
-    ${(n.refs || []).length ? `<div class="refs">${n.refs.slice(0, 8).map(r => `<span class="ref" title="${esc(r.type + ": " + r.value)}"><b>${esc(r.type)}</b> ${esc(r.value)}</span>`).join("")}</div>` : ""}
+    ${(n.refs || []).length ? `<div class="refs">${n.refs.slice(0, 8).map(r => r.type === "paper"
+      ? `<a class="ref" href="papers/${esc(r.value)}.html" style="text-decoration:none;color:var(--accent);border-color:var(--accent)"><b style="color:inherit">paper</b> ${esc(r.value)} ›</a>`
+      : `<span class="ref" title="${esc(r.type + ": " + r.value)}"><b>${esc(r.type)}</b> ${esc(r.value)}</span>`).join("")}</div>` : ""}
     ${after.length || led.length ? `<div class="after">${after.length ? `from ${after.map(link).join(" · ")}` : ""}${after.length && led.length ? " &nbsp;→&nbsp; " : ""}${led.length ? `led to ${led.slice(0, 4).map(link).join(" · ")}${led.length > 4 ? ` +${led.length - 4}` : ""}` : ""}</div>` : ""}
   </article>`;
 }

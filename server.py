@@ -202,6 +202,23 @@ def run_agent(text: str) -> tuple[str, bool]:
     return out, False
 
 
+def papers_index() -> bytes:
+    """papers/: every papers/*.html, by its <title>."""
+    import html, re
+    rows = []
+    for f in sorted((HERE / "papers").glob("*.html")):
+        m = re.search(r"<title>(.*?)</title>", f.read_text(errors="replace"), re.S)
+        rows.append(f'<a href="{f.name}"><b>{html.escape(m.group(1).strip() if m else f.stem)}</b><span>{f.stem}</span></a>')
+    return f"""<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Papers</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=JetBrains+Mono&display=swap">
+<script>try{{var t=localStorage.getItem("nb-theme");if(t)document.documentElement.dataset.theme=t}}catch(e){{}}</script>
+<link rel="stylesheet" href="../style.css"><style>.list{{max-width:760px;margin:32px auto;padding:0 16px;display:grid;gap:10px}}
+.list a{{display:flex;justify-content:space-between;gap:12px;padding:14px 16px;background:var(--surface);border:1px solid var(--line);border-radius:10px;text-decoration:none;color:var(--ink)}}
+.list a:hover{{border-color:var(--accent)}} .list span{{font:12px var(--mono);color:var(--ink-3)}}</style>
+<header class="top"><div class="brand"><b><a href="../" style="color:inherit;text-decoration:none">Research Notebook</a></b><span>Papers</span></div></header>
+<div class="list">{"".join(rows) or "<p>No papers yet.</p>"}</div>""".encode()
+
+
 class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
@@ -223,6 +240,8 @@ class H(BaseHTTPRequestHandler):
             return self.js(merged_notes())
         if path == "/api/discussion":
             return self.js(discussion())
+        if path.rstrip("/") == "/papers":
+            return self.send(200, papers_index(), "text/html; charset=utf-8")
         f = (HERE / (path.lstrip("/") or "index.html")).resolve()
         if f.is_file() and HERE in f.parents and f.suffix in (".html", ".js", ".css", ".svg", ".png", ".ico"):
             return self.send(200, f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream")
