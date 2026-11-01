@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<script>try{var t=localStorage.getItem("nb-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="../style.css">
+<link rel="stylesheet" href="../comments.css">
+<style>
+/* A paper: visuals and interactions only. Replace every section; keep the shape (sections with ids and h2s). */
+.wrap{max-width:1040px}
+section{margin:30px 0}
+section h2{font-size:20px;letter-spacing:-.01em;margin:0 0 12px}
+.hero h1{font-size:30px;letter-spacing:-.02em;margin:6px 0 4px}
+.tag{font:600 10.5px var(--mono);text-transform:uppercase;letter-spacing:.06em;padding:2px 6px;border-radius:4px;background:var(--info-bg);color:var(--info)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.cap{font-size:13px;color:var(--ink-3);margin-top:8px}
+.toggles{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+.toggles button{border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);border-radius:6px;padding:3px 10px;font:600 12.5px var(--sans);cursor:pointer}
+.toggles button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.panel{padding:14px 16px}
+.viz svg{display:block;width:100%}
+.viz text{font:12px var(--sans);fill:var(--ink-2)} .viz text.v{font:600 12px var(--mono);fill:var(--ink)} .viz text.mut{fill:var(--ink-3)}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand"><b><a href="../" style="color:inherit;text-decoration:none">← Notebook</a></b><span>{{title}}</span></div>
+  <div class="grow"></div>
+  <button class="iconbtn" id="theme" aria-label="Toggle light or dark theme" title="Toggle light / dark">◐</button>
+</header>
+<div class="wrap">
+
+<section class="hero" id="s0">
+  <span class="tag">paper</span>
+  <h1>{{title}}</h1>
+  <div class="grid" id="kpis"></div>
+</section>
+
+<section id="s1">
+  <h2>The result</h2>
+  <div class="panel">
+    <div class="toggles" id="pick"><button class="on" data-k="a">variant A</button><button data-k="b">variant B</button></div>
+    <div class="viz" id="chart"></div>
+    <div class="cap">Replace with the real data: every number names its n.</div>
+  </div>
+</section>
+
+<section id="s2">
+  <h2>How it works</h2>
+  <div class="panel"><div class="viz" id="flow"></div></div>
+</section>
+
+</div>
+<script src="../viz.js"></script>
+<script>
+// Data lives inline. Swap these for the result's own numbers and sources.
+const DATA = {
+  kpis: [["headline", 71.4, "%", "n = 500"], ["baseline", 68.0, "%", "n = 500"], ["cost", 0.006, "$/q", "n = 500"]],
+  views: { a: [{ label: "split A", value: 71.4 }, { label: "split B", value: 64.0 }],
+           b: [{ label: "split A", value: 69.0 }, { label: "split B", value: 66.5 }] },
+};
+document.getElementById("kpis").innerHTML = DATA.kpis.map(([l, v, u, n]) =>
+  `<div class="kpi"><div class="v">${NBViz.fmt(v, u)}</div><div class="l">${l} · ${n}</div></div>`).join("");
+function draw(k) {
+  document.getElementById("chart").innerHTML = NBViz.viz({ type: "bars", unit: "%", items: DATA.views[k] }, "var(--accent)");
+  document.querySelectorAll("#pick button").forEach(b => b.classList.toggle("on", b.dataset.k === k));
+}
+document.getElementById("pick").onclick = e => { const b = e.target.closest("button"); if (b) draw(b.dataset.k); };
+draw("a");
+document.getElementById("flow").innerHTML = NBViz.viz({ type: "flow", steps: ["input", "step 1", "step 2", "answer"] }, "var(--c2)");
+document.getElementById("theme").onclick = () => {
+  const d = document.documentElement, cur = d.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+  d.dataset.theme = cur === "dark" ? "light" : "dark"; try { localStorage.setItem("nb-theme", d.dataset.theme); } catch (e) {}
+};
+</script>
+<script src="../comments.js" defer></script>
+</body>
+</html>

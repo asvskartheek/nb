@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nb-notebook"
+version = "0.1.0"
+description = "Research notebooks for any project: atomic visual notes, visual papers, and margin comments answered by agents."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+nb = "nb.cli:main"
+
+[tool.setuptools]
+packages = ["nb"]
+
+[tool.setuptools.package-data]
+nb = ["web/*", "guides/*.md", "templates/*"]

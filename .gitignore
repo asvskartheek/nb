@@ -1,3 +1,7 @@
-data/_transcript_index.tsv
-discussion.jsonl
-shots/
+__pycache__/
+*.egg-info/
+build/
+dist/
+.venv/
+.notebook/discussion.jsonl
+.notebook/shots/

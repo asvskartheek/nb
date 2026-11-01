@@ -1,15 +1,29 @@
-// Research notebook: notes as a time-ordered log, lines of work as lanes, agent chats per note.
+// The research notebook: notes as a time-ordered log, lines of work as lanes, comments answered by agents.
+// The project's settings (title, timezone, areas, headline series) come from api/config (.notebook/notebook.json).
 "use strict";
 const $ = s => document.querySelector(s);
 const { esc, trunc, fmt, fmtT, LOWER_BETTER } = NBViz;  // viz.js loads first
-const IST = 330 * 60000;
+let IST = 0;  // the project's UTC offset in ms, from its timezone
 const ist = ts => new Date(Date.parse(ts) + IST);           // read with getUTC*: the project's local time, any viewer
 const dayKey = ts => ist(ts).toISOString().slice(0, 10);
 const hhmm = ts => ist(ts).toISOString().slice(11, 16);
 const DOW = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"], MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const dayLabel = k => { const d = new Date(k + "T00:00:00Z"); return `${DOW[d.getUTCDay()]} ${d.getUTCDate()} ${MON[d.getUTCMonth()]}`; };
-const AREAS = ["setup","infra","data","eval","agent","retrieval","reading","model","cost","latency","analysis","tooling","process"];
-const KINDS = ["setup","build","run","result","finding","decision","deadend","fix","question","milestone"];
+let AREAS = ["setup","infra","data","eval","agent","retrieval","reading","model","cost","latency","analysis","tooling","process"];
+let KINDS = ["setup","build","run","result","finding","decision","deadend","fix","question","milestone"];
+let SERIES = [], SKIP = null;  // the headline chart: [name, metric -> bool] per series; SKIP: labels never on it
+function configure(c) {
+  const m = String(c.timezone || "+00:00").match(/^([+-])(\d\d):?(\d\d)$/);
+  IST = m ? (m[1] === "-" ? -1 : 1) * (+m[2] * 60 + +m[3]) * 60000 : 0;
+  if (Array.isArray(c.areas) && c.areas.length) AREAS = c.areas.includes("process") ? c.areas : [...c.areas, "process"];
+  if (Array.isArray(c.kinds) && c.kinds.length) KINDS = c.kinds;
+  const rx = s => { try { return s ? new RegExp(s, "i") : null; } catch (e) { return null; } };
+  SKIP = rx(c.headline_skip);
+  SERIES = (c.headline || []).map(h => { const lab = rx(h.label), ex = rx(h.exclude), n = h.n;
+    return [h.name, x => (h.n_is != null && x.n === h.n_is) || (!!lab && lab.test(x.label || "") && !(ex && ex.test(x.label || ""))
+      && (!n || x.n == null || x.n >= n[0] && x.n <= n[1]))]; });
+  if (c.title) { document.title = c.title; $("#title").textContent = c.title; }
+}
 const KCOL = {setup:"var(--ink-3)",build:"var(--ink-3)",run:"var(--info)",result:"var(--info)",finding:"var(--fnd)",
   question:"var(--fnd)",decision:"var(--dec)",deadend:"var(--loss)",fix:"var(--win)",milestone:"var(--win)"};
 
@@ -28,6 +42,7 @@ paintTheme();
 // ---------- load
 async function load() {
   let d;
+  try { configure(await (await fetch("api/config")).json()); } catch (e) {}
   try { d = await (await fetch("api/notes")).json(); } catch (e) { d = window.NB_DATA || { threads: [], notes: [] }; }
   S.notes = d.notes.filter(n => n.id && n.ts && !isNaN(Date.parse(n.ts))).sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));
   S.byId = Object.fromEntries(S.notes.map(n => [n.id, n]));
@@ -86,17 +101,11 @@ function renderTop() {
 }
 
 // ---------- headline trajectory: the accuracy series that tell the story, each on one fixed slice
-const SERIES = [
-  ["Task A · full 300", m => /task a|\btask\b/i.test(m.label) && !/183|98|ctl|core|right|gain/i.test(m.label) && (!m.n || m.n >= 300 && m.n <= 310)],
-  ["Task A · slice 180", m => /183/.test(m.label)],
-  ["All tasks · 700", m => m.n === 723 || /overall|all six|all sheets/i.test(m.label) && (!m.n || m.n > 700)],
-  ["Task B · 120", m => /^docs?\b/i.test(m.label) && (!m.n || m.n === 120)],
-];
 function renderTraj() {
   const series = {};
   for (const n of S.notes) for (const m of n.metrics || []) {
     if (typeof m.value !== "number" || m.unit !== "%" || m.value <= 0 || m.value > 100) continue;
-    if (/GER|recall|hit|retriev|sem sim|parity|coverage|share|rate/i.test(m.label || "")) continue;  // not accuracy
+    if (SKIP && SKIP.test(m.label || "")) continue;
     const s = SERIES.find(([, f]) => f(m)); if (!s) continue;
     (series[s[0]] ||= []).push({ t: Date.parse(n.ts), v: m.value, n, m });
   }
