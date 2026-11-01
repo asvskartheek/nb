@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research Notebook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<script>try{var t=localStorage.getItem("nb-theme");if(t)document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand"><b>Research Notebook</b><span id="meta"></span></div>
+  <div class="grow"></div>
+  <input id="q" class="search" type="search" placeholder="Filter notes…" autocomplete="off">
+  <button id="chats" class="textbtn" title="All agent chats">Chats <span class="ct" id="chatct" hidden></span></button>
+  <button id="theme" class="iconbtn" title="Toggle light / dark" aria-label="Toggle theme"></button>
+</header>
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+  <div class="panel" id="trajp" hidden>
+    <div class="panel-h"><h2>Headline accuracy over time</h2><div class="grow"></div><div class="legend" id="trajleg"></div></div>
+    <div id="traj" style="padding:8px 14px 10px"></div>
+  </div>
+  <div class="panel" style="margin-top:16px">
+    <div class="panel-h"><h2>Lines of work</h2><div class="grow"></div><div class="legend" id="legend"></div>
+      <button class="iconbtn" id="fold" title="Collapse" style="width:26px;height:26px">–</button></div>
+    <div class="lanes-box" id="lanesbox"><svg id="lanes"></svg></div>
+  </div>
+  <div class="layout">
+    <aside class="index" id="index"></aside>
+    <main>
+      <div class="filterbar" id="filters"></div>
+      <div id="log"></div>
+    </main>
+  </div>
+</div>
+<aside class="drawer" id="drawer" aria-hidden="true">
+  <div class="dr-h"><b id="drt"></b><button class="iconbtn" id="drx" aria-label="Close">✕</button></div>
+  <div class="dr-b" id="drb"></div>
+</aside>
+<div class="tip" id="tip"></div>
+<script src="app.js"></script>
+</body>
+</html>
