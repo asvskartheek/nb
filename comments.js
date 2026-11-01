@@ -99,15 +99,43 @@
     r.setStart(a[0], a[1]); r.setEnd(b[0], b[1] + 1);
     return r;
   }
+  // the view an anchor lives in: the selected toggles of the nearest container with controls ("3:ctx v1|5:on")
+  const CONTROLS = "button,[role=tab],[aria-pressed],input,select";
+  function stateOf(node, root) {
+    let box = node && (node.nodeType === 1 ? node : node.parentElement);
+    while (box && box !== root && !box.querySelector(CONTROLS)) box = box.parentElement;
+    if (!box) return "";
+    const out = [];
+    [...box.querySelectorAll(CONTROLS)].forEach((x, i) => {
+      if (x.closest(UI)) return;
+      const lab = clean(x.getAttribute("aria-label") || x.textContent || x.name || x.type, 30);
+      if (x.matches("input[type=checkbox],input[type=radio]")) { if (x.checked) out.push(`${i}:${lab || "checked"}`); }
+      else if (x.matches("input,select")) { if (x.value !== "" && x.type !== "search" && x.type !== "text") out.push(`${i}:${lab}=${x.value}`); }
+      else if (x.matches(".on,.active,.sel,.selected,[aria-pressed=true],[aria-selected=true]")) out.push(`${i}:${lab}`);
+    });
+    return out.join("|");
+  }
+  const viewLabel = st => st ? st.split("|").map(x => x.split(":").slice(1).join(":")).join(" · ") : "";
   const parseRect = s => { const v = String(s).split(",").map(Number); return v.length === 4 && v.every(isFinite) ? { x: v[0], y: v[1], w: v[2], h: v[3] } : null; };
   function resolve(t) {
     const root = MODE.rootOf(t);
     if (!root) return null;  // a note filtered out of the log: its thread waits off-page
+    const a = locate(t, root);
+    if (t.state && a && !a.whole && stateOf(nodeOf(a), root) !== t.state) return null;  // made in another view of this widget
+    return a;
+  }
+  function locate(t, root) {
     const box = t.rect && parseRect(t.rect);
     if (box) return { box: { base: root, ...box }, root };
     if (t.path != null && t.path !== "") { const e = byPath(root, t.path); if (e) return { el: e, root }; }
     if (t.quote && t.path == null) { const r = findRange(root, t.quote); if (r) return { range: r, root }; }
     return { el: root === document.body ? null : root, root, whole: true };
+  }
+  function nodeOf(a) {
+    if (a.el) return a.el;
+    if (a.range) return a.range.commonAncestorContainer;
+    const b = boxRect(a.box), hit = document.elementsFromPoint(b.left + b.width / 2, b.top + b.height / 2).find(x => !x.closest(UI));
+    return hit && a.box.base.contains(hit) ? hit : a.box.base;
   }
   const boxRect = x => { const r = x.base.getBoundingClientRect(); return new DOMRect(r.left + x.x, r.top + x.y, x.w, x.h); };  // offsets from its root
   const rectOf = a => { const b = a.box ? boxRect(a.box) : a.range ? a.range.getBoundingClientRect() : a.el ? a.el.getBoundingClientRect() : null; return b && (b.width || b.height) ? b : null; };
@@ -160,7 +188,7 @@
     : `<span class="cm-av" style="background:hsl(${hue(name)} 55% 46%)">${esc(initials(name))}</span>`;
   const msg = m => `<div class="cm-msg"><div class="cm-mh">${avatar(m.author, m.agent)}<div><b>${esc(m.agent ? "Agent" : m.author)}</b><span>${when(m.t)}</span></div></div>
       <div class="cm-body${m.error ? " err" : ""}">${esc(m.body)}</div></div>`;
-  const target = t => (t.what ? `<div class="cm-what" title="${esc(t.what)}">${esc(clean(t.what, 48))}</div>` : "")
+  const target = t => (t.what || t.state ? `<div class="cm-what" title="${esc([t.what, t.state && "view: " + viewLabel(t.state)].filter(Boolean).join(" · "))}">${esc(clean([t.what, t.state && "in " + viewLabel(t.state)].filter(Boolean).join(" · "), 56))}</div>` : "")
     + (t.shot ? `<a class="cm-shot" href="${esc(BASE + t.shot)}" target="_blank" title="The region the agent sees"><img src="${esc(BASE + t.shot)}" alt="drawn region"></a>` : "");
   function card(t) {
     const on = t.id === active, first = t.messages[0], rest = t.messages.slice(1);
@@ -308,7 +336,8 @@
     }
     const hb = host.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
     const bg = getComputedStyle(document.body).backgroundColor;
-    const full = await H.toCanvas(host, { pixelRatio: dpr, backgroundColor: bg, filter: n => !(n.classList && [...n.classList].some(c => c.startsWith("cm-"))) });
+    // skipFonts: the page's web fonts come from a cross-origin stylesheet the library cannot read anyway
+    const full = await H.toCanvas(host, { pixelRatio: dpr, backgroundColor: bg, skipFonts: true, fontEmbedCSS: "", filter: n => !(n.classList && [...n.classList].some(c => c.startsWith("cm-"))) });
     const c = document.createElement("canvas"); c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
     c.getContext("2d").drawImage(full, (r.left - hb.left) * dpr, (r.top - hb.top) * dpr, r.width * dpr, r.height * dpr, 0, 0, c.width, c.height);
     return c.toDataURL("image/jpeg", 0.88);
@@ -344,8 +373,9 @@
         const ta = document.querySelector("[data-new]"); if (!ta.value.trim()) return ta.focus();
         const d = draft;
         if (d.capture) await d.capture;  // the region's screenshot, if it is still being taken
+        const st = d.anchor && !d.anchor.whole ? stateOf(nodeOf(d.anchor), d.anchor.root || document.body) : "";
         const ev = await send({ kind: "comment", note: d.key, body: ta.value, quote: d.quote, label: d.label, path: d.path, what: d.what,
-          rect: d.rect, shot: d.shot });
+          rect: d.rect, shot: d.shot, state: st });
         if (ev) { draft = null; active = ev.id; render(); }
       } else if (D.sendReply) {
         const ta = document.querySelector(`[data-reply="${CSS.escape(D.sendReply)}"]`); if (!ta.value.trim()) return ta.focus();
@@ -368,6 +398,13 @@
     if (hit) { active = hit.id; draft = null; render(); }
     else if ((active || draft) && getSelection().isCollapsed) { active = null; draft = null; render(); }
   });
+  let mt;
+  new MutationObserver(ms => {
+    if (ms.every(m => (m.target.nodeType === 1 ? m.target : m.target.parentElement)?.closest(UI))) return;
+    const f = document.activeElement;
+    if ((rail.contains(f) || sheet.contains(f)) && f.matches("textarea,input")) return;  // never rebuild under someone typing
+    clearTimeout(mt); mt = setTimeout(render, 120);
+  }).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["class", "aria-pressed", "aria-selected"], characterData: true });
   let rt;
   addEventListener("resize", () => { clearTimeout(rt); rt = setTimeout(render, 150); });
   new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(() => { if (rail.children.length) { layout(); paintMarks(visible()); } }, 120); }).observe(document.body);
@@ -385,6 +422,7 @@
     open(tid) { active = tid; draft = null; render(); const a = anc[tid]; if (a) scrollTo({ top: topOf(a) - 140, behavior: "smooth" }); },
     pick: startPick,
     draw: startDraw,
+    stateOf,  // the view signature an anchor records (for debugging anchors)
   });
   render(); load();
 })();

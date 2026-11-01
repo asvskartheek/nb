@@ -93,7 +93,7 @@ def discussion() -> list[dict]:
         if e.get("kind") == "comment":
             th[e["id"]] = dict(id=e["id"], note=e.get("note"), t=e["t"], resolved=False, quote=e.get("quote"),
                                label=e.get("label"), path=e.get("path"), what=e.get("what"),
-                               rect=e.get("rect"), shot=e.get("shot"),
+                               rect=e.get("rect"), shot=e.get("shot"), state=e.get("state"),
                                messages=[dict(id=e["id"], t=e["t"], author=e["author"], body=e["body"], agent=False)])
         elif e.get("parent") in th:
             t = th[e["parent"]]
@@ -120,7 +120,7 @@ def post(d: dict) -> dict | None:
             return None
         # note: a note id, "_notebook" (the whole notebook) or "paper:<name>#<section id>"; quote: the text selected
         ev.update(note=str(d["note"])[:120], body=body)
-        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label", "path", "what", "rect") if d.get(k)})  # what: the picked element
+        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label", "path", "what", "rect", "state") if d.get(k)})  # what: the picked element
         shot = str(d.get("shot") or "")
         if shot.startswith(("data:image/jpeg;base64,", "data:image/png;base64,")):
             ext = "png" if shot.startswith("data:image/png") else "jpg"
@@ -182,10 +182,15 @@ Answer the last message. Be short and concrete: lead with the answer, give numbe
 
 
 def shot_line(th: dict) -> str:
-    """A drawn region: the agent opens the screenshot of exactly what the person boxed before anything else."""
+    """A drawn region: the agent opens the screenshot of exactly what the person boxed before anything else.
+    Also the view they were in: the toggles selected around the anchor (state "3:ctx v1" -> "ctx v1")."""
+    view = ""
+    if th.get("state"):
+        view = ("\nThe view they were looking at had these options selected: "
+                + ", ".join(x.split(":", 1)[-1] for x in th["state"].split("|")) + ".")
     if not th.get("shot"):
-        return ""
-    return (f"\nThey drew a box on the page and commented on what is inside it. A screenshot of that region is at "
+        return view
+    return view + (f"\nThey drew a box on the page and commented on what is inside it. A screenshot of that region is at "
             f"{HERE / th['shot']}: open it with the Read tool first and answer about what it shows.")
 
 
