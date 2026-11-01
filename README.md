@@ -11,4 +11,7 @@ NOTEBOOK_PROJECT="/path/to/project" python notebook/server.py --port 8765
 - `discussion.jsonl`: agent chats, append-only. Every person's message on a note (or on the whole notebook, via **Chats**)
   starts its own headless `claude -p` run with read-only tools in `NOTEBOOK_PROJECT`; up to `--agents` (default 4)
   answer at once and each posts back into its own chat.
+- Papers live in `papers/*.html` (listed at `/papers/`). A paper becomes commentable by including
+  `<link rel="stylesheet" href="../comments.css"><script src="../comments.js" defer></script>`: every `<section id>`
+  gets a comment marker, selecting text offers **Comment** with the quote, and each thread gets its own agent like note chats.
 - No build step: `index.html`, `style.css`, `app.js`.

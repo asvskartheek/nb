@@ -90,7 +90,8 @@ def discussion() -> list[dict]:
     th = {}
     for e in events():
         if e.get("kind") == "comment":
-            th[e["id"]] = dict(id=e["id"], note=e.get("note"), t=e["t"], resolved=False,
+            th[e["id"]] = dict(id=e["id"], note=e.get("note"), t=e["t"], resolved=False, quote=e.get("quote"),
+                               label=e.get("label"),
                                messages=[dict(id=e["id"], t=e["t"], author=e["author"], body=e["body"], agent=False)])
         elif e.get("parent") in th:
             t = th[e["parent"]]
@@ -115,7 +116,9 @@ def post(d: dict) -> dict | None:
     if kind == "comment":
         if not body or not d.get("note"):
             return None
-        ev.update(note=str(d["note"])[:120], body=body)  # note "_notebook" = a chat about the whole notebook
+        # note: a note id, "_notebook" (the whole notebook) or "paper:<name>#<section id>"; quote: the text selected
+        ev.update(note=str(d["note"])[:120], body=body)
+        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label") if d.get(k)})
     else:
         ids = {e["id"] for e in events() if e.get("kind") == "comment"}
         if d.get("parent") not in ids or (kind == "reply" and not body):
@@ -142,6 +145,9 @@ def prompt(th: dict) -> str:
     note = next((n for n in nb["notes"] if n.get("id") == th["note"]), None)
     thread = next((t for t in nb["threads"] if note and t["id"] == note.get("thread")), None)
     chat = "\n\n".join(f"{'agent' if m['agent'] else m['author']}: {m['body']}" for m in th["messages"])
+    if str(th["note"]).startswith("paper:"):
+        name, _, sec = th["note"][6:].partition("#")
+        return paper_prompt(name, sec, th, chat)
     about = (f"The note:\n{json.dumps(note, indent=1)}\n\nIts line of work:\n{json.dumps(thread, indent=1)}\n\n"
              f"Its thread's notes (titles):\n" + "\n".join(f"- {n['ts']} [{n.get('kind')}] {n.get('title')}"
                 for n in nb["notes"] if note and n.get("thread") == note.get("thread"))) if note else \
@@ -157,6 +163,24 @@ The chat so far:
 
 Answer the last message. Be short and concrete: lead with the answer, give numbers with n and their source
 (file, commit, run), say plainly when the evidence does not settle it. No preamble. Plain text, at most ~180 words."""
+
+
+def paper_prompt(name: str, sec: str, th: dict, chat: str) -> str:
+    f = HERE / "papers" / f"{Path(name).name}.html"
+    where = f"section id=\"{sec}\"" + (f" ({th['label']})" if th.get("label") else "") if sec else "the whole paper"
+    quote = f"\nThe passage they selected:\n> {th['quote']}\n" if th.get("quote") else ""
+    return f"""You answer a comment thread on a research paper of the project in this folder.
+The paper is {f} (one self-contained HTML file; numbers live in inline JS/JSON). The comment is on {where}.{quote}
+The project's code, git history, .research/ (ledger: models.json, decisions.jsonl, tasks/), experiments/,
+bench/runs and logs/ are the evidence, and the notebook notes are in {DATA}/notes-*.json. Read what you need
+(read-only; grep the paper for the section rather than reading it whole), then answer.
+
+The thread so far:
+{chat}
+
+Answer the last message. Be short and concrete: lead with the answer, give numbers with n and their source
+(file, task id, commit), say plainly when the evidence does not settle it or when the paper is wrong.
+No preamble. Plain text, at most ~180 words."""
 
 
 def summon(tid: str):

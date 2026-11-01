@@ -377,7 +377,11 @@ const when = t => { const d = new Date(t * 1000).toISOString(); return `${dayLab
 function threadHtml(t, showNote) {
   const n = S.byId[t.note];
   const state = t.resolved ? "resolved" : t.thinking ? "agent answering…" : t.waiting ? "queued for agent" : "answered";
-  return `<div class="dthread${t.resolved ? " resolved" : ""}"><div class="dt-h">${showNote ? `<a data-goto="${esc(t.note)}">${esc(n ? n.title : "Whole notebook")}</a>` : `<span style="flex:1">${when(t.t)}</span>`}
+  const paper = String(t.note).startsWith("paper:") && t.note.slice(6).split("#");
+  const head = paper ? `<a href="papers/${esc(paper[0])}.html#${esc(paper[1] || "")}" style="color:var(--accent)">Paper ${esc(paper[0])} § ${esc(t.label || paper[1] || "whole")}</a>`
+    : `<a data-goto="${esc(t.note)}">${esc(n ? n.title : "Whole notebook")}</a>`;
+  return `<div class="dthread${t.resolved ? " resolved" : ""}"><div class="dt-h">${showNote ? head : `<span style="flex:1">${when(t.t)}</span>`}
+    ${t.quote ? `</div><div class="msg" style="border-top:0;padding-bottom:0"><p style="border-left:3px solid var(--accent);padding-left:8px;color:var(--ink-2);font-size:13px">${esc(t.quote)}</p></div><div class="dt-h" style="background:none;padding-top:4px">` : ""}
     <span class="st ${t.thinking ? "s-ongoing" : t.resolved ? "" : t.waiting ? "s-null" : "s-win"}">${state}</span>
     <button class="disc" data-resolve="${esc(t.id)}" data-r="${t.resolved ? "reopen" : "resolve"}">${t.resolved ? "Reopen" : "Resolve"}</button></div>
     ${t.messages.map(m => `<div class="msg"><div class="who" style="${m.agent ? "color:var(--accent)" : ""}">${esc(m.agent ? "Agent" : m.author)}<span>${when(m.t)}</span></div><p${m.error ? ' style="color:var(--loss)"' : ""}>${esc(m.body)}</p></div>`).join("")}
