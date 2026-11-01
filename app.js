@@ -417,6 +417,7 @@ function renderAll() { renderTop(); renderTraj(); renderLanes(); renderIndex(); 
 const cmRefresh = () => window.CM && CM.refresh && CM.refresh();
 
 document.addEventListener("click", e => {
+  if (e.target.closest(".cm-rail,.cm-sheet")) return;  // margin comments handle their own buttons (comments.js)
   const g = e.target.closest("[data-goto],[data-note],[data-thread],[data-kind],[data-area],[data-clear],[data-chat],[data-info],[data-line],[data-send-new],[data-send-reply],[data-resolve]");
   if (!g) return;
   const D = g.dataset;
