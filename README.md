@@ -14,5 +14,6 @@ NOTEBOOK_PROJECT="/path/to/project" python notebook/server.py --port 8765
 - Papers live in `papers/*.html` (listed at `/papers/`). A paper becomes commentable by including
   `<link rel="stylesheet" href="../comments.css"><script src="../comments.js" defer></script>`; papers anchor in `<section id>`,
   and the notebook's notes share the same margin comments (Google Docs style). Select text and press the margin ＋, or press
-  **C** to pick any element (↑/↓ parent/child, Esc cancels); each thread gets its own agent like note chats.
+  **C** to pick any element (↑/↓ parent/child, Esc cancels), or **C then T** to drag a box: the region is captured
+  (html-to-image) into `shots/` (local, untracked) and the agent opens that image first. Each thread gets its own agent.
 - No build step: `index.html`, `style.css`, `app.js`.

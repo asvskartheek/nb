@@ -13,13 +13,14 @@ back into its own thread as an agent reply. A thread whose last message is from 
 """
 from __future__ import annotations
 
-import argparse, json, mimetypes, os, secrets, shutil, subprocess, threading, time
+import argparse, base64, json, mimetypes, os, secrets, shutil, subprocess, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 DATA = HERE / "data"
 LOG = HERE / "discussion.jsonl"
+SHOTS = HERE / "shots"  # region screenshots people draw a comment box around (C then T); kept local
 KINDS = ("comment", "reply", "resolve", "reopen")
 PROJECT = Path(os.environ.get("NOTEBOOK_PROJECT") or HERE.parent)  # where the agent reads code, ledger and logs
 AGENT_BUDGET_S = 900
@@ -92,6 +93,7 @@ def discussion() -> list[dict]:
         if e.get("kind") == "comment":
             th[e["id"]] = dict(id=e["id"], note=e.get("note"), t=e["t"], resolved=False, quote=e.get("quote"),
                                label=e.get("label"), path=e.get("path"), what=e.get("what"),
+                               rect=e.get("rect"), shot=e.get("shot"),
                                messages=[dict(id=e["id"], t=e["t"], author=e["author"], body=e["body"], agent=False)])
         elif e.get("parent") in th:
             t = th[e["parent"]]
@@ -118,7 +120,18 @@ def post(d: dict) -> dict | None:
             return None
         # note: a note id, "_notebook" (the whole notebook) or "paper:<name>#<section id>"; quote: the text selected
         ev.update(note=str(d["note"])[:120], body=body)
-        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label", "path", "what") if d.get(k)})  # what: the picked element
+        ev.update({k: str(d[k]).strip()[:600] for k in ("quote", "label", "path", "what", "rect") if d.get(k)})  # what: the picked element
+        shot = str(d.get("shot") or "")
+        if shot.startswith(("data:image/jpeg;base64,", "data:image/png;base64,")):
+            ext = "png" if shot.startswith("data:image/png") else "jpg"
+            try:
+                raw = base64.b64decode(shot.split(",", 1)[1], validate=True)
+            except ValueError:
+                raw = b""
+            if 0 < len(raw) <= 8_000_000:
+                SHOTS.mkdir(exist_ok=True)
+                (SHOTS / f"{ev['id']}.{ext}").write_bytes(raw)
+                ev["shot"] = f"shots/{ev['id']}.{ext}"
     else:
         ids = {e["id"] for e in events() if e.get("kind") == "comment"}
         if d.get("parent") not in ids or (kind == "reply" and not body):
@@ -148,7 +161,7 @@ def prompt(th: dict) -> str:
     if str(th["note"]).startswith("paper:"):
         name, _, sec = th["note"][6:].partition("#")
         return paper_prompt(name, sec, th, chat)
-    pointed = (f"\nThey pointed at: {th['what']}" if th.get("what") else "") + \
+    pointed = shot_line(th) + (f"\nThey pointed at: {th['what']}" if th.get("what") else "") + \
               (f"\nThe text there:\n> {th['quote']}" if th.get("quote") else "")
     about = (f"The note:\n{json.dumps(note, indent=1)}\n\nIts line of work:\n{json.dumps(thread, indent=1)}\n\n"
              f"Its thread's notes (titles):\n" + "\n".join(f"- {n['ts']} [{n.get('kind')}] {n.get('title')}"
@@ -168,10 +181,18 @@ Answer the last message. Be short and concrete: lead with the answer, give numbe
 (file, commit, run), say plainly when the evidence does not settle it. No preamble. Plain text, at most ~180 words."""
 
 
+def shot_line(th: dict) -> str:
+    """A drawn region: the agent opens the screenshot of exactly what the person boxed before anything else."""
+    if not th.get("shot"):
+        return ""
+    return (f"\nThey drew a box on the page and commented on what is inside it. A screenshot of that region is at "
+            f"{HERE / th['shot']}: open it with the Read tool first and answer about what it shows.")
+
+
 def paper_prompt(name: str, sec: str, th: dict, chat: str) -> str:
     f = HERE / "papers" / f"{Path(name).name}.html"
     where = f"section id=\"{sec}\"" + (f" ({th['label']})" if th.get("label") else "") if sec else "the whole paper"
-    quote = (f"\nThe element they picked: {th['what']}" if th.get("what") else "") + \
+    quote = shot_line(th) + (f"\nThe element they picked: {th['what']}" if th.get("what") else "") + \
             (f"\nThe text there:\n> {th['quote']}\n" if th.get("quote") else "")
     return f"""You answer a comment thread on a research paper of the project in this folder.
 The paper is {f} (one self-contained HTML file; numbers live in inline JS/JSON). The comment is on {where}.{quote}
@@ -271,7 +292,7 @@ class H(BaseHTTPRequestHandler):
         if path.rstrip("/") == "/papers":
             return self.send(200, papers_index(), "text/html; charset=utf-8")
         f = (HERE / (path.lstrip("/") or "index.html")).resolve()
-        if f.is_file() and HERE in f.parents and f.suffix in (".html", ".js", ".css", ".svg", ".png", ".ico"):
+        if f.is_file() and HERE in f.parents and f.suffix in (".html", ".js", ".css", ".svg", ".png", ".jpg", ".ico"):
             return self.send(200, f.read_bytes(), mimetypes.guess_type(f.name)[0] or "application/octet-stream")
         self.send(404, b"not found", "text/plain")
 
@@ -279,7 +300,7 @@ class H(BaseHTTPRequestHandler):
         if self.path.split("?")[0] != "/api/discussion":
             return self.send(404, b"not found", "text/plain")
         n = int(self.headers.get("Content-Length") or 0)
-        if not 0 < n <= 64_000:
+        if not 0 < n <= 12_000_000:  # a comment may carry a region screenshot
             return self.js(dict(error="bad size"), 413)
         try:
             d = json.loads(self.rfile.read(n))

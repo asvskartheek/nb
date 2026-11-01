@@ -71,3 +71,12 @@ html.cm-picking,html.cm-picking *{cursor:crosshair!important}
 .cm-phint span{opacity:.8;font-size:12px}
 .cm-phint kbd{font:600 11px var(--mono);background:color-mix(in srgb,var(--bg) 18%,transparent);border-radius:4px;padding:1px 5px;margin-right:3px}
 @media (max-width:640px){.cm-phint{gap:8px;font-size:12px}.cm-phint span:nth-child(n+3){display:none}}
+/* C then T: draw a region */
+.cm-draw{position:fixed;inset:0;z-index:89;display:none;cursor:crosshair;background:rgba(0,0,0,.04)}
+.cm-draw.on{display:block}
+.cm-drect{position:absolute;display:none;border:2px dashed var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent);border-radius:3px}
+.cm-drect:after{content:attr(data-size);position:absolute;right:0;bottom:-22px;font:600 11px var(--mono);background:var(--accent);color:var(--accent-ink);padding:1px 6px;border-radius:4px}
+.cm-box.reg{background:color-mix(in srgb,#f2c94c 10%,transparent);outline-style:dashed}
+.cm-shot{display:block;margin:0 0 8px;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface-2)}
+.cm-shot img{display:block;width:100%;max-height:150px;object-fit:contain;background:var(--bg)}
+.cm-shot.wait{padding:10px;font-size:12px;color:var(--ink-3);text-align:center}

@@ -2,7 +2,8 @@
 // several at once). One script for papers (papers/*.html) and for the notebook's notes (index.html).
 //   papers:   <link rel="stylesheet" href="../comments.css"><script src="../comments.js" defer></script>
 //   notebook: the same with "comments.css" / "comments.js"; the page calls CM.refresh() after it re-renders.
-// Anchor a comment on selected text (the margin ＋, or Ctrl/Cmd+Alt+M) or on any element: press C, point, click.
+// Anchor a comment on selected text (the margin ＋, or Ctrl/Cmd+Alt+M), on any element (press C, point, click), or on
+// a region you draw (C then T, drag a box): the region is captured as an image and the agent reads it.
 // Anchors live inside a root: a paper's <section id> or a note's <article class="card" id>; outside one, the page.
 (() => {
   "use strict";
@@ -31,18 +32,22 @@
   const initials = n => (n || "?").trim().split(/\s+/).map(w => w[0]).join("").slice(0, 2).toUpperCase();
   const hue = n => [...(n || "")].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 200);
   const HL = !!(window.CSS && CSS.highlights && typeof Highlight !== "undefined");
-  const UI = ".cm-rail,.cm-sheet,.cm-add,.cm-tog,.cm-pick,.cm-ptag,.cm-phint,.cm-boxes";
+  const UI = ".cm-rail,.cm-sheet,.cm-add,.cm-tog,.cm-pick,.cm-ptag,.cm-phint,.cm-boxes,.cm-draw";
+  const BASE = IS_PAPER ? "../" : "";
 
   let all = [], active = null, draft = null, showResolved = false, anc = {};
 
   // ---------- furniture
   const el = (tag, cls) => { const e = document.createElement(tag); e.className = cls; return e; };
   const rail = el("div", "cm-rail"), add = el("button", "cm-add"), sheet = el("div", "cm-sheet"), boxes = el("div", "cm-boxes");
-  const pbox = el("div", "cm-pick"), ptag = el("div", "cm-ptag"), phint = el("div", "cm-phint");
+  const pbox = el("div", "cm-pick"), ptag = el("div", "cm-ptag"), phint = el("div", "cm-phint"), pad = el("div", "cm-draw");
+  pad.innerHTML = '<div class="cm-drect"></div>';
   add.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M12 8v8M8 12h8"/></svg>';
   add.title = "Add comment (Ctrl+Alt+M)";
-  phint.innerHTML = "<b>Pick an element to comment on</b><span><kbd>Click</kbd> pick</span><span><kbd>↑</kbd> parent</span><span><kbd>↓</kbd> child</span><span><kbd>Esc</kbd> cancel</span>";
-  document.body.append(boxes, rail, add, sheet, pbox, ptag, phint);
+  const HINT_PICK = "<b>Pick an element to comment on</b><span><kbd>Click</kbd> pick</span><span><kbd>↑</kbd> parent</span><span><kbd>↓</kbd> child</span><span><kbd>T</kbd> draw a box</span><span><kbd>Esc</kbd> cancel</span>";
+  const HINT_DRAW = "<b>Drag a box around what you want to comment on</b><span>it is captured for the agent</span><span><kbd>Esc</kbd> cancel</span>";
+  phint.innerHTML = HINT_PICK;
+  document.body.append(boxes, rail, add, sheet, pbox, ptag, phint, pad);
   const tog = el("button", "cm-tog");
   const themeBtn = document.querySelector("header #theme");
   themeBtn ? themeBtn.before(tog) : (tog.classList.add("cm-tog-float"), document.body.append(tog));
@@ -94,14 +99,18 @@
     r.setStart(a[0], a[1]); r.setEnd(b[0], b[1] + 1);
     return r;
   }
+  const parseRect = s => { const v = String(s).split(",").map(Number); return v.length === 4 && v.every(isFinite) ? { x: v[0], y: v[1], w: v[2], h: v[3] } : null; };
   function resolve(t) {
     const root = MODE.rootOf(t);
     if (!root) return null;  // a note filtered out of the log: its thread waits off-page
+    const box = t.rect && parseRect(t.rect);
+    if (box) return { box: { base: root, ...box }, root };
     if (t.path != null && t.path !== "") { const e = byPath(root, t.path); if (e) return { el: e, root }; }
     if (t.quote && t.path == null) { const r = findRange(root, t.quote); if (r) return { range: r, root }; }
     return { el: root === document.body ? null : root, root, whole: true };
   }
-  const rectOf = a => { const b = a.range ? a.range.getBoundingClientRect() : a.el ? a.el.getBoundingClientRect() : null; return b && (b.width || b.height) ? b : null; };
+  const boxRect = x => { const r = x.base.getBoundingClientRect(); return new DOMRect(r.left + x.x, r.top + x.y, x.w, x.h); };  // offsets from its root
+  const rectOf = a => { const b = a.box ? boxRect(a.box) : a.range ? a.range.getBoundingClientRect() : a.el ? a.el.getBoundingClientRect() : null; return b && (b.width || b.height) ? b : null; };
   const topOf = a => { const b = a && rectOf(a); return b ? b.top + scrollY : 120; };
 
   // ---------- render
@@ -133,9 +142,9 @@
       CSS.highlights.set("cm-anc", new Highlight(...list.filter(([, a]) => a.range).map(([, a]) => a.range)));
       const ar = anc[active]; ar && ar.range ? CSS.highlights.set("cm-act", new Highlight(ar.range)) : CSS.highlights.delete("cm-act");
     }
-    boxes.innerHTML = list.filter(([, a]) => a.el && !a.whole).map(([id, a]) => {
+    boxes.innerHTML = list.filter(([, a]) => a.box || a.el && !a.whole).map(([id, a]) => {
       const b = rectOf(a); if (!b) return "";
-      return `<div class="cm-box${id === active ? " act" : ""}" style="left:${b.left + scrollX - 2}px;top:${b.top + scrollY - 2}px;width:${b.width + 4}px;height:${b.height + 4}px"></div>`;
+      return `<div class="cm-box${a.box ? " reg" : ""}${id === active ? " act" : ""}" style="left:${b.left + scrollX - 2}px;top:${b.top + scrollY - 2}px;width:${b.width + 4}px;height:${b.height + 4}px"></div>`;
     }).join("");
   }
   function layout() {
@@ -151,7 +160,8 @@
     : `<span class="cm-av" style="background:hsl(${hue(name)} 55% 46%)">${esc(initials(name))}</span>`;
   const msg = m => `<div class="cm-msg"><div class="cm-mh">${avatar(m.author, m.agent)}<div><b>${esc(m.agent ? "Agent" : m.author)}</b><span>${when(m.t)}</span></div></div>
       <div class="cm-body${m.error ? " err" : ""}">${esc(m.body)}</div></div>`;
-  const target = t => t.what ? `<div class="cm-what" title="${esc(t.what)}">${esc(clean(t.what, 48))}</div>` : "";
+  const target = t => (t.what ? `<div class="cm-what" title="${esc(t.what)}">${esc(clean(t.what, 48))}</div>` : "")
+    + (t.shot ? `<a class="cm-shot" href="${esc(BASE + t.shot)}" target="_blank" title="The region the agent sees"><img src="${esc(BASE + t.shot)}" alt="drawn region"></a>` : "");
   function card(t) {
     const on = t.id === active, first = t.messages[0], rest = t.messages.slice(1);
     return `<div class="cm-card${on ? " act" : ""}${t.resolved ? " res" : ""}" data-id="${esc(t.id)}">
@@ -167,6 +177,7 @@
   function newCard() {
     return `<div class="cm-card act new" data-id="_draft">
       ${draft.what ? `<div class="cm-what">${esc(clean(draft.what, 48))}</div>` : ""}
+      ${draft.rect ? (draft.shot ? `<div class="cm-shot"><img src="${draft.shot}" alt="drawn region"></div>` : `<div class="cm-shot wait">${draft.shotFailed ? "Capture failed: the agent gets the box and its text" : "Capturing the region…"}</div>`) : ""}
       <div class="cm-mh">${avatar(me() || "You")}<div><b>${esc(me() || "You")}</b></div></div>
       ${me() ? "" : `<input class="cm-name" placeholder="Your name" data-me>`}
       <textarea rows="2" placeholder="Comment" data-new></textarea>
@@ -208,6 +219,7 @@
     return `<${tag}${e.id ? "#" + e.id : ""}${cls.length ? "." + cls.join(".") : ""}>${txt ? ` “${txt}”` : ""}` + (root ? ` in ${MODE.labelOf(root)}` : "");
   };
   function startPick() {
+    phint.innerHTML = HINT_PICK;
     picking = true; hov = null; stepped = false; document.documentElement.classList.add("cm-picking"); phint.classList.add("on");
     add.classList.remove("on"); getSelection().removeAllRanges();
   }
@@ -241,14 +253,77 @@
   }, true);
   addEventListener("scroll", () => picking && drawPick(), true);
 
+  // ---------- C then T: draw a box; the region is captured with html-to-image (the browser's own renderer)
+  let drawing = false, d0 = null;
+  const drect = pad.firstChild;
+  function startDraw() {
+    drawing = true; d0 = null; drect.style.display = "none"; pad.classList.add("on");
+    phint.innerHTML = HINT_DRAW; phint.classList.add("on"); getSelection().removeAllRanges();
+  }
+  function stopDraw() { drawing = false; d0 = null; pad.classList.remove("on"); phint.classList.remove("on"); }
+  pad.addEventListener("pointerdown", e => { d0 = [e.clientX, e.clientY]; pad.setPointerCapture(e.pointerId); sizeBox(e); drect.style.display = "block"; });
+  pad.addEventListener("pointermove", e => d0 && sizeBox(e));
+  pad.addEventListener("pointerup", e => {
+    if (!d0) return;
+    const r = boxFrom(e); stopDraw();
+    if (r.width >= 8 && r.height >= 8) region(r);
+  });
+  const boxFrom = e => new DOMRect(Math.min(d0[0], e.clientX), Math.min(d0[1], e.clientY), Math.abs(e.clientX - d0[0]), Math.abs(e.clientY - d0[1]));
+  function sizeBox(e) { const r = boxFrom(e); Object.assign(drect.style, { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px" });
+    drect.dataset.size = `${Math.round(r.width)}×${Math.round(r.height)}`; }
+  function region(r) {
+    const mid = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    const root = mid && !mid.closest(UI) ? mid.closest(MODE.roots) : null, base = root || document.body, b = base.getBoundingClientRect();
+    const box = { x: Math.round(r.left - b.left), y: Math.round(r.top - b.top), w: Math.round(r.width), h: Math.round(r.height) };
+    const d = { key: MODE.keyOf(root), label: MODE.labelOf(root), rect: `${box.x},${box.y},${box.w},${box.h}`,
+      what: `region ${box.w}×${box.h} in ${MODE.labelOf(root)}`, quote: textIn(r, base), anchor: { box: { base, ...box }, root: base } };
+    d.capture = capture(r).then(url => { d.shot = url; }, err => { d.shotFailed = true; console.warn("region capture failed", err); })
+      .finally(() => {  // swap the thumbnail in place: re-rendering the card would drop what is being typed
+        const box = draft === d && document.querySelector('.cm-card.new .cm-shot');
+        if (box) box.outerHTML = d.shot ? `<div class="cm-shot"><img src="${d.shot}" alt="drawn region"></div>`
+          : `<div class="cm-shot wait">Capture failed: the agent gets the box and its text</div>`;
+      });
+    startDraft(d);
+  }
+  function textIn(r, base) {  // the words inside the box, so the agent has them even without the image
+    const out = [], w = document.createTreeWalker(base, NodeFilter.SHOW_TEXT, { acceptNode: n =>
+      n.parentElement.closest(UI + ",script,style") || !n.data.trim() ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (let n; (n = w.nextNode());) {
+      const rg = document.createRange(); rg.selectNodeContents(n); const q = rg.getBoundingClientRect();
+      if (q.right > r.left && q.left < r.right && q.bottom > r.top && q.top < r.bottom) out.push(n.data.trim());
+      if (out.join(" ").length > 600) break;
+    }
+    return clean(out.join(" "), 600);
+  }
+  let lib = null;
+  const loadLib = () => lib ||= new Promise((ok, no) => { const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js"; s.onload = () => ok(window.htmlToImage); s.onerror = no; document.head.append(s); });
+  async function capture(r) {
+    const H = await loadLib();
+    let host = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) || document.body;  // the smallest element holding the box
+    while (host.parentElement && host !== document.body) {
+      const b = host.getBoundingClientRect();
+      if (b.left <= r.left && b.top <= r.top && b.right >= r.right && b.bottom >= r.bottom && !(host instanceof SVGElement && host.tagName !== "svg")) break;
+      host = host.parentElement;
+    }
+    const hb = host.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
+    const bg = getComputedStyle(document.body).backgroundColor;
+    const full = await H.toCanvas(host, { pixelRatio: dpr, backgroundColor: bg, filter: n => !(n.classList && [...n.classList].some(c => c.startsWith("cm-"))) });
+    const c = document.createElement("canvas"); c.width = Math.round(r.width * dpr); c.height = Math.round(r.height * dpr);
+    c.getContext("2d").drawImage(full, (r.left - hb.left) * dpr, (r.top - hb.top) * dpr, r.width * dpr, r.height * dpr, 0, 0, c.width, c.height);
+    return c.toDataURL("image/jpeg", 0.88);
+  }
+
   document.addEventListener("keydown", e => {
     const typing = e.target.matches && e.target.matches("input,textarea,select,[contenteditable],[contenteditable] *");
+    if (drawing) { e.preventDefault(); e.stopPropagation(); if (e.key === "Escape") stopDraw(); return; }
     if (picking) {
       e.preventDefault(); e.stopPropagation();
       if (e.key === "Escape") stopPick();
       else if (e.key === "ArrowUp" && hov && hov.parentElement && hov.parentElement !== document.documentElement) { hov = hov.parentElement; stepped = true; drawPick(); }
       else if (e.key === "ArrowDown" && hov && hov.firstElementChild) { hov = hov.firstElementChild; stepped = true; drawPick(); }
       else if (e.key === "Enter") pick(hov);
+      else if (e.key === "t" || e.key === "T") { stopPick(); startDraw(); }
       return;
     }
     if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "c" || e.key === "C")) { e.preventDefault(); e.stopPropagation(); startPick(); return; }
@@ -268,7 +343,9 @@
         const who = document.querySelector("[data-me]"); if (who && who.value.trim()) setMe(who.value.trim());
         const ta = document.querySelector("[data-new]"); if (!ta.value.trim()) return ta.focus();
         const d = draft;
-        const ev = await send({ kind: "comment", note: d.key, body: ta.value, quote: d.quote, label: d.label, path: d.path, what: d.what });
+        if (d.capture) await d.capture;  // the region's screenshot, if it is still being taken
+        const ev = await send({ kind: "comment", note: d.key, body: ta.value, quote: d.quote, label: d.label, path: d.path, what: d.what,
+          rect: d.rect, shot: d.shot });
         if (ev) { draft = null; active = ev.id; render(); }
       } else if (D.sendReply) {
         const ta = document.querySelector(`[data-reply="${CSS.escape(D.sendReply)}"]`); if (!ta.value.trim()) return ta.focus();
@@ -286,6 +363,7 @@
     const cr = pos ? { node: pos.offsetNode, off: pos.offset } : document.caretRangeFromPoint ? (r => r && { node: r.startContainer, off: r.startOffset })(document.caretRangeFromPoint(e.clientX, e.clientY)) : null;
     const hit = visible().find(t => { const a = anc[t.id];
       if (a.range) { try { return cr && a.range.isPointInRange(cr.node, cr.off); } catch (x) { return false; } }
+      if (a.box) { const b = boxRect(a.box); return e.clientX >= b.left && e.clientX <= b.right && e.clientY >= b.top && e.clientY <= b.bottom; }
       return a.el && !a.whole && a.el.contains(e.target); });
     if (hit) { active = hit.id; draft = null; render(); }
     else if ((active || draft) && getSelection().isCollapsed) { active = null; draft = null; render(); }
@@ -306,6 +384,7 @@
     },
     open(tid) { active = tid; draft = null; render(); const a = anc[tid]; if (a) scrollTo({ top: topOf(a) - 140, behavior: "smooth" }); },
     pick: startPick,
+    draw: startDraw,
   });
   render(); load();
 })();
